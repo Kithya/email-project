@@ -26,13 +26,13 @@ interface NavProps {
 
 export function Nav({ links, isCollapsed }: NavProps) {
   const [_, setTab] = useLocalStorage("email-tab", "inbox");
-  const [hasMounted, setHasMounted] = useState(false);
+  // const [hasMounted, setHasMounted] = useState(false);
 
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
+  // useEffect(() => {
+  //   setHasMounted(true);
+  // }, []);
 
-  if (!hasMounted) return null;
+  // if (!hasMounted) return null;
 
   return (
     <div

@@ -8,7 +8,7 @@ import {
 } from "~/components/ui/resizable";
 import { Separator } from "~/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { Tooltip } from "~/components/ui/tooltip";
+import { Tooltip, TooltipProvider } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import AccountSwitcher from "./account-switcher";
 import Sidebar from "./Sidebar";
@@ -27,10 +27,19 @@ const Mail = ({
   defaultCollapsed,
 }: Props) => {
   const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed);
+  // const [hasMounted, setHasMounted] = React.useState(false);
+
+  // React.useEffect(() => {
+  //   setHasMounted(true);
+  // }, []);
+
+  // if (!hasMounted) {
+  //   return null;
+  // }
 
   return (
     // Left side
-    <Tooltip delayDuration={0}>
+    <TooltipProvider delayDuration={0}>
       <ResizablePanelGroup
         direction="horizontal"
         onLayout={(sizes: number[]) => {
@@ -50,13 +59,13 @@ const Mail = ({
           }}
           className={cn(
             isCollapsed &&
-              `min-w-[50px] transition-all duration-300 ease-in-out`,
+              "min-w-[50px] transition-all duration-300 ease-in-out",
           )}
         >
           <div className="flex h-full flex-1 flex-col">
             <div
               className={cn(
-                "flex h-[52px] items-center justify-between",
+                "flex h-[52px] items-center justify-center",
                 isCollapsed ? "h-[52px]" : "px-2",
               )}
             >
@@ -74,7 +83,7 @@ const Mail = ({
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[1]} minSize={30}>
           <Tabs defaultValue="inbox">
-            <div className="flex items-center px-4 py-2">
+            <div className="flex items-center border-b px-4 py-2">
               <h1 className="text-xl font-bold">Inbox</h1>
               <TabsList className="ml-auto">
                 <TabsTrigger
@@ -91,7 +100,7 @@ const Mail = ({
                 </TabsTrigger>
               </TabsList>
             </div>
-            <Separator />
+            {/* <Separator /> */}
             {/* Search Bar */}
             Search bar
             <TabsContent value="inbox">
@@ -108,7 +117,7 @@ const Mail = ({
           <ThreadDisplay />
         </ResizablePanel>
       </ResizablePanelGroup>
-    </Tooltip>
+    </TooltipProvider>
   );
 };
 

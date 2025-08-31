@@ -39,7 +39,7 @@ model Thread {
   draftStatus     Boolean  @default(false)
   sentStatus      Boolean  @default(false)
   emails          Email[]
-  account         Account  @relation(fields: [accountId], references: [id])
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([done])
@@ -75,8 +75,8 @@ model Email {
   folderId             String?
   omitted              String[]
   emailLabel           EmailLabel            @default(inbox)
-  from                 EmailAddress          @relation("FromEmail", fields: [fromId], references: [id])
-  thread               Thread                @relation(fields: [threadId], references: [id])
+  from                 EmailAddress          @relation("FromEmail", fields: [fromId], references: [id], onDelete: Cascade)
+  thread               Thread                @relation(fields: [threadId], references: [id], onDelete: Cascade)
   attachments          EmailAttachment[]
   bcc                  EmailAddress[]        @relation("BccEmails")
   cc                   EmailAddress[]        @relation("CcEmails")
@@ -95,7 +95,7 @@ model EmailAddress {
   raw           String?
   accountId     String
   sentEmails    Email[] @relation("FromEmail")
-  account       Account @relation(fields: [accountId], references: [id])
+  account       Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   receivedBcc   Email[] @relation("BccEmails")
   receivedCc    Email[] @relation("CcEmails")
   replyToEmails Email[] @relation("ReplyToEmails")
@@ -114,7 +114,7 @@ model EmailAttachment {
   content         String?
   contentLocation String?
   emailId         String
-  Email           Email   @relation(fields: [emailId], references: [id])
+  Email           Email   @relation(fields: [emailId], references: [id], onDelete: Cascade)
 }
 
 enum EmailLabel {
