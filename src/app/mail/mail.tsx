@@ -14,6 +14,8 @@ import AccountSwitcher from "./account-switcher";
 import Sidebar from "./Sidebar";
 import ThreadList from "./thread-list";
 import ThreadDisplay from "./thread-display";
+import SearchBar from "./search-bar";
+import AskAI from "./ask-ai";
 
 type Props = {
   defaultLayout: number[] | undefined;
@@ -77,7 +79,7 @@ const Mail = ({
             <Sidebar isCollapsed={isCollapsed} />
             <div className="flex-1"></div>
             {/* Ask AI section */}
-            Ask AI
+            <AskAI isCollapsed={isCollapsed}/>
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -102,7 +104,7 @@ const Mail = ({
             </div>
             {/* <Separator /> */}
             {/* Search Bar */}
-            Search bar
+            <SearchBar />
             <TabsContent value="inbox">
               <ThreadList />
             </TabsContent>

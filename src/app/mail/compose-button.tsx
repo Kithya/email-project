@@ -12,18 +12,53 @@ import {
   DrawerTrigger,
 } from "~/components/ui/drawer";
 import EmailEditor from "./email-editor";
+import { api } from "~/trpc/react";
+import useThreads from "~/hooks/use-threads";
+import { toast } from "sonner";
 
 const ComposeButton = () => {
-  const [toValue, setToValue] = React.useState<
+  const [toValues, setToValues] = React.useState<
     { label: string; value: string }[]
   >([]);
   const [ccValues, setCcValue] = React.useState<
     { label: string; value: string }[]
   >([]);
   const [subject, setSubject] = React.useState<string>("");
+  const { account } = useThreads();
+
+  const sendEmail = api.account.sendEmail.useMutation();
 
   const handleSend = async (value: string) => {
-    console.log("value", value);
+    if (!account) return;
+
+    sendEmail.mutate(
+      {
+        accountId: account.id,
+        threadId: undefined,
+        body: value,
+        from: {
+          name: account?.name ?? "Me",
+          address: account?.emailAddress ?? "me@example.com",
+        },
+        to: toValues.map((to) => ({ name: to.value, address: to.value })),
+        cc: ccValues.map((cc) => ({ name: cc.value, address: cc.value })),
+        replyTo: {
+          name: account?.name ?? "Me",
+          address: account.emailAddress ?? "me@example.com",
+        },
+        subject: subject,
+        inReplyTo: undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Email sent");
+        },
+        onError: (error) => {
+          console.log(error);
+          toast.error("Error sending email");
+        },
+      },
+    );
   };
 
   return (
@@ -36,18 +71,18 @@ const ComposeButton = () => {
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>Compose Email</DrawerTitle>
+          <DrawerTitle className="text-left">Compose Email</DrawerTitle>
         </DrawerHeader>
         <EmailEditor
-          toValues={toValue}
-          setToValue={setToValue}
+          toValues={toValues}
+          setToValue={setToValues}
           ccValues={ccValues}
           setCcValue={setCcValue}
           subject={subject}
           setSubject={setSubject}
           handleSend={handleSend}
-          isSending={false}
-          to={toValue.map((to) => to.value)}
+          isSending={sendEmail.isPending}
+          to={toValues.map((to) => to.value)}
           defaultToolbarExpand={true}
         />
       </DrawerContent>

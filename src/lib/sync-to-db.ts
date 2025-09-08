@@ -1,6 +1,9 @@
 import { db } from "~/server/db";
 import type { EmailAddress, EmailAttachment, EmailMessage } from "~/types";
 import pLimit from "p-limit";
+import { OramaClient } from "./orama";
+import { turndown } from "./turndown";
+import { getEmbedding } from "./embedding";
 
 export async function syncEmailsToDatabase(
   emails: EmailMessage[],
@@ -10,14 +13,28 @@ export async function syncEmailsToDatabase(
 
   const limit = pLimit(10);
 
+  const orama = new OramaClient(accountId);
+  await orama.initialize();
+
   try {
     // Promise.all(
     //   emails.map((email, index) => {
     //     upsertEmail(email, accountId, index);
     //   }),
     // );
-
     for (const email of emails) {
+      const body = turndown.turndown(email.body ?? email.bodySnippet ?? "");
+      const embeddings = await getEmbedding(body);
+      await orama.insert({
+        subject: email.subject,
+        body: body,
+        from: email.from.address,
+        rawBody: email.bodySnippet ?? "",
+        to: email.to.map((to) => to.address),
+        sentAt: email.sentAt.toLocaleString(),
+        threadId: email.threadId,
+        embeddings,
+      });
       await upsertEmail(email, accountId, 0);
     }
   } catch (error) {}
