@@ -2,7 +2,7 @@ import { create, insert, search, type AnyOrama } from "@orama/orama";
 import { db } from "~/server/db";
 import { OramaClient } from "./lib/orama";
 import { turndown } from "./lib/turndown";
-import { getEmbedding } from "./lib/embedding";
+import { getEmbeddings } from "./lib/embedding";
 
 const orama = new OramaClient("141730");
 await orama.initialize();

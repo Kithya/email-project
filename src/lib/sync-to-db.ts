@@ -3,7 +3,7 @@ import type { EmailAddress, EmailAttachment, EmailMessage } from "~/types";
 import pLimit from "p-limit";
 import { OramaClient } from "./orama";
 import { turndown } from "./turndown";
-import { getEmbedding } from "./embedding";
+import { getEmbeddings } from "./embedding";
 
 export async function syncEmailsToDatabase(
   emails: EmailMessage[],
@@ -24,7 +24,7 @@ export async function syncEmailsToDatabase(
     // );
     for (const email of emails) {
       const body = turndown.turndown(email.body ?? email.bodySnippet ?? "");
-      const embeddings = await getEmbedding(body);
+      const embeddings = await getEmbeddings(body);
       await orama.insert({
         subject: email.subject,
         body: body,
