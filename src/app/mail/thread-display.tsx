@@ -24,6 +24,14 @@ const ThreadDisplay = () => {
 
   const [isSearching] = useAtom(isSearchingAtom);
 
+  // Debug logs - remove these after fixing
+  // console.log("=== ThreadDisplay Debug ===");
+  // console.log("isSearching:", isSearching);
+  // console.log("threadId:", threadId);
+  // console.log("threads length:", threads?.length);
+  // console.log("thread found:", !!thread);
+  // console.log("thread data:", thread);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center p-2">
@@ -64,6 +72,14 @@ const ThreadDisplay = () => {
         </div>
       </div>
       <Separator />
+
+      {/* Debug info - remove after fixing */}
+      {/* <div className="bg-yellow-100 p-2 text-xs">
+        <div>isSearching: {isSearching ? "true" : "false"}</div>
+        <div>threadId: {threadId || "null"}</div>
+        <div>thread found: {thread ? "yes" : "no"}</div>
+      </div> */}
+
       {isSearching ? (
         <SearchDisplay />
       ) : (
@@ -118,7 +134,7 @@ const ThreadDisplay = () => {
           ) : (
             <>
               <div className="text-muted-foreground p-8 text-center">
-                No message seleted
+                No message selected
               </div>
             </>
           )}

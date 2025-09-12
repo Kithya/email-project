@@ -16,7 +16,12 @@ import { api } from "~/trpc/react";
 import useThreads from "~/hooks/use-threads";
 import { toast } from "sonner";
 
-const ComposeButton = () => {
+type ComposeButtonProps = {
+  compact?: boolean;
+  className?: string;
+};
+
+const ComposeButton = ({ compact = false, className }: ComposeButtonProps) => {
   const [toValues, setToValues] = React.useState<
     { label: string; value: string }[]
   >([]);
@@ -64,10 +69,21 @@ const ComposeButton = () => {
   return (
     <Drawer>
       <DrawerTrigger asChild>
-        <Button>
-          <Pencil className="mr-1 size-4" />
-          Compose
-        </Button>
+        {compact ? (
+          <Button
+            size={"icon"}
+            className={className}
+            aria-label="Compose"
+            title="Compose"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button>
+            <Pencil className="mr-1 size-4" />
+            Compose
+          </Button>
+        )}
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader>

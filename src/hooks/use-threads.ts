@@ -29,6 +29,19 @@ const useThreads = () => {
     },
   );
 
+  // React.useEffect(() => {
+  //   console.log("=== useThreads Debug ===");
+  //   console.log("accountId from localStorage:", accountId);
+  //   console.log("current threadId:", threadId);
+  //   console.log("threads data:", threads);
+  //   console.log("isFetching:", isFetching);
+  //   console.log("accounts:", accounts);
+  // });
+
+  // React.useEffect(() => {
+  //   setThreadId(null);
+  // }, [accountId, setThreadId]);
+
   return {
     threads,
     isFetching,

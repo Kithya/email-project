@@ -105,7 +105,10 @@ export const accountRouter = createTRPCRouter({
       };
 
       return await ctx.db.thread.findMany({
-        where: filter,
+        where: {
+          accountId: account.id,
+          ...filter,
+        },
         include: {
           emails: {
             orderBy: {
@@ -167,6 +170,7 @@ export const accountRouter = createTRPCRouter({
       const thread = await ctx.db.thread.findFirst({
         where: {
           id: input.threadId,
+          accountId: account.id,
         },
         include: {
           emails: {

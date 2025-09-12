@@ -15,20 +15,30 @@ const SearchBar = () => {
   const { isFetching } = useThreads();
 
   const handleBlur = () => {
-    if (searchValue !== "") return;
+    // Allow exiting search mode even if there's a search value
+    // This will let users click on threads while keeping the search term
     setIsSearching(false);
+  };
+
+  const handleFocus = () => {
+    setIsSearching(true);
+  };
+
+  const handleClear = () => {
+    setIsSearching(false);
+    setSearchValue("");
   };
 
   return (
     <div className="relative m-2">
       <Search className="text-muted-foreground absolute top-2.5 left-2 size-4" />
       <Input
-        placeholder="Search...."
+        placeholder="Search your email...."
         className="pl-8"
         value={searchValue}
         onChange={(e) => setSearchValue(e.target.value)}
-        onFocus={() => setIsSearching(true)}
-        onBlur={() => handleBlur()}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
       />
 
       <div className="absolute top-2.5 right-2 flex items-center gap-2">
@@ -37,10 +47,7 @@ const SearchBar = () => {
         )}
         <button
           className="rounded-sm hover:bg-gray-400/20"
-          onClick={() => {
-            setIsSearching(false);
-            setSearchValue("");
-          }}
+          onClick={handleClear}
         >
           <X className="size-4 text-gray-400" />
         </button>

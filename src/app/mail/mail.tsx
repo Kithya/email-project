@@ -8,7 +8,12 @@ import {
 } from "~/components/ui/resizable";
 import { Separator } from "~/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { Tooltip, TooltipProvider } from "~/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import AccountSwitcher from "./account-switcher";
 import Sidebar from "./Sidebar";
@@ -16,6 +21,10 @@ import ThreadList from "./thread-list";
 import ThreadDisplay from "./thread-display";
 import SearchBar from "./search-bar";
 import AskAI from "./ask-ai";
+import { UserButton } from "@clerk/nextjs";
+import ThemeToggle from "~/components/theme-toggle";
+import ComposeButton from "./compose-button";
+import { PenLine } from "lucide-react";
 
 type Props = {
   defaultLayout: number[] | undefined;
@@ -78,8 +87,10 @@ const Mail = ({
             {/* Sidebar */}
             <Sidebar isCollapsed={isCollapsed} />
             <div className="flex-1"></div>
+
             {/* Ask AI section */}
-            <AskAI isCollapsed={isCollapsed}/>
+            <AskAI isCollapsed={isCollapsed} />
+            <ButtomActions isCollapsed={isCollapsed} />
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -124,3 +135,47 @@ const Mail = ({
 };
 
 export default Mail;
+
+function ButtomActions({ isCollapsed }: { isCollapsed: boolean }) {
+  if (isCollapsed) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-4">
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <span className="hover:bg-muted inline-flex h-9 w-9 items-center justify-center rounded-md">
+              <ComposeButton compact />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Compose</TooltipContent>
+        </Tooltip>
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <span className="hover:bg-muted inline-flex h-9 w-9 items-center justify-center rounded-md">
+              <ThemeToggle />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Theme</TooltipContent>
+        </Tooltip>
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <span className="hover:bg-muted inline-flex h-9 w-9 items-center justify-center rounded-md">
+              <UserButton />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Account</TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  }
+  return (
+    <div className="absolute bottom-4 left-4">
+      <div className="flex items-center gap-2">
+        <UserButton />
+        <ThemeToggle />
+        <ComposeButton />
+      </div>
+    </div>
+  );
+}
