@@ -12,40 +12,36 @@ const useThreads = () => {
   const [done] = useLocalStorage("email-done", false);
   const [threadId, setThreadId] = useAtom(threadIdAtom);
 
-  const {
-    data: threads,
-    isFetching,
-    refetch,
-  } = api.account.getThreads.useQuery(
-    {
-      accountId,
-      tab,
-      done,
-    },
+  // Current page (resets when account/tab/done changes)
+  const [page, setPage] = React.useState(1);
+  React.useEffect(() => {
+    setPage(1);
+  }, [accountId, tab, done]);
+
+  const { data, isFetching, refetch } = api.account.getThreads.useQuery(
+    { accountId, tab, done, page, pageSize: 15 },
     {
       enabled: !!accountId && !!tab,
-      placeholderData: (e) => e,
+      // NOTE: remove keepPreviousData to satisfy your typings
       refetchInterval: 5000,
     },
   );
 
-  // React.useEffect(() => {
-  //   console.log("=== useThreads Debug ===");
-  //   console.log("accountId from localStorage:", accountId);
-  //   console.log("current threadId:", threadId);
-  //   console.log("threads data:", threads);
-  //   console.log("isFetching:", isFetching);
-  //   console.log("accounts:", accounts);
-  // });
+  const threads = data?.items ?? [];
+  const totalPages = data?.totalPages ?? 1;
 
-  // React.useEffect(() => {
-  //   setThreadId(null);
-  // }, [accountId, setThreadId]);
+  const goToPage = (p: number) => {
+    const clamped = Math.min(Math.max(1, p), totalPages);
+    setPage(clamped);
+  };
 
   return {
     threads,
     isFetching,
     refetch,
+    page,
+    totalPages,
+    goToPage,
     accountId,
     setThreadId,
     threadId,

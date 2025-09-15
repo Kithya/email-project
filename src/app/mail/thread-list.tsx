@@ -6,9 +6,13 @@ import useThreads from "~/hooks/use-threads";
 import { cn } from "~/lib/utils";
 import DOMPurify from "dompurify";
 import { Badge } from "~/components/ui/badge";
+import { useAtom } from "jotai";
+import { isSearchingAtom } from "./search-bar";
 
 const ThreadList = () => {
-  const { threads, threadId, setThreadId } = useThreads();
+  const { threads, threadId, setThreadId, page, totalPages, goToPage } =
+    useThreads();
+  const [, setIsSearching] = useAtom(isSearchingAtom);
 
   // Debug logs
   // console.log("=== ThreadList Debug ===");
@@ -127,6 +131,43 @@ const ThreadList = () => {
             </React.Fragment>
           );
         })}
+
+        <div className="mt-4 flex w-full items-center justify-center gap-2">
+          <button
+            className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goToPage(1)}
+            disabled={page <= 1}
+          >
+            First
+          </button>
+          <button
+            className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goToPage(page - 1)}
+            disabled={page <= 1}
+          >
+            Prev
+          </button>
+
+          <span className="text-xs text-gray-600">
+            Page <span className="font-medium">{page}</span> of{" "}
+            <span className="font-medium">{totalPages}</span>
+          </span>
+
+          <button
+            className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goToPage(page + 1)}
+            disabled={page >= totalPages}
+          >
+            Next
+          </button>
+          <button
+            className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goToPage(totalPages)}
+            disabled={page >= totalPages}
+          >
+            Last
+          </button>
+        </div>
       </div>
     </div>
   );

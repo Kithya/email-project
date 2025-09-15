@@ -81,6 +81,8 @@ export const accountRouter = createTRPCRouter({
         accountId: z.string(),
         tab: z.string(),
         done: z.boolean(),
+        page: z.number().int().min(1).max(100).optional().default(15),
+        pageSize: z.number().int().min(1).max(100).optional().default(15),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -91,7 +93,10 @@ export const accountRouter = createTRPCRouter({
       const acc = new Account(account.accessToken);
       acc.syncEmails().catch(console.error);
 
-      let filter: Prisma.ThreadWhereInput = {};
+      let filter: Prisma.ThreadWhereInput = {
+        accountId: account.id,
+        done: { equals: input.done },
+      };
       if (input.tab === "inbox") {
         filter.inboxStatus = true;
       } else if (input.tab === "draft") {
@@ -100,22 +105,56 @@ export const accountRouter = createTRPCRouter({
         filter.sentStatus = true;
       }
 
-      filter.done = {
-        equals: input.done,
-      };
+      const total = await ctx.db.thread.count({ where: filter });
+      const totalPages = Math.max(1, Math.ceil(total / input.pageSize));
+      const page = Math.min(Math.max(1, input.page), totalPages);
+      const skip = (page - 1) * input.pageSize;
 
-      return await ctx.db.thread.findMany({
-        where: {
-          accountId: account.id,
-          ...filter,
-        },
+      // filter.done = {
+      //   equals: input.done,
+      // };
+
+      //   return await ctx.db.thread.findMany({
+      //     where: {
+      //       accountId: account.id,
+      //       ...filter,
+      //     },
+      //     include: {
+      //       emails: {
+      //         orderBy: {
+      //           sentAt: "asc",
+      //         },
+      //         select: {
+      //           from: true,
+      //           body: true,
+      //           subject: true,
+      //           sentAt: true,
+      //           id: true,
+      //           bodySnippet: true,
+      //           emailLabel: true,
+      //           sysLabels: true,
+      //         },
+      //       },
+      //     },
+      //     take: 15,
+      //     orderBy: {
+      //       lastMessageDate: "desc",
+      //     },
+      //   });
+      // }),
+      const items = await ctx.db.thread.findMany({
+        where: filter,
+        orderBy: [{ lastMessageDate: "desc" }, { id: "desc" }],
+        skip,
+        take: input.pageSize,
         include: {
           emails: {
-            orderBy: {
-              sentAt: "asc",
-            },
+            orderBy: { sentAt: "asc" },
             select: {
               from: true,
+              to: {
+                select: { address: true },
+              },
               body: true,
               subject: true,
               sentAt: true,
@@ -126,11 +165,9 @@ export const accountRouter = createTRPCRouter({
             },
           },
         },
-        take: 15,
-        orderBy: {
-          lastMessageDate: "desc",
-        },
       });
+
+      return { items, page, pageSize: input.pageSize, total, totalPages };
     }),
 
   getSuggestions: privateProcedure
@@ -263,5 +300,32 @@ export const accountRouter = createTRPCRouter({
       await orama.initialize();
       const results = await orama.search({ term: input.query });
       return results;
+    }),
+
+  getThreadById: privateProcedure
+    .input(z.object({ accountId: z.string(), threadId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const account = await authoriseAccountAccess(
+        input.accountId,
+        ctx.auth.userId,
+      );
+      return await ctx.db.thread.findFirst({
+        where: { id: input.threadId, accountId: account.id },
+        include: {
+          emails: {
+            orderBy: { sentAt: "asc" },
+            select: {
+              from: true,
+              body: true,
+              subject: true,
+              sentAt: true,
+              id: true,
+              bodySnippet: true,
+              emailLabel: true,
+              sysLabels: true,
+            },
+          },
+        },
+      });
     }),
 });
