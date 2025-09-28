@@ -36,8 +36,6 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
         toast.error(
           "Too many requests. Please wait a moment before trying again.",
         );
-
-        // Auto-reset rate limit flag after 60 seconds
         setTimeout(() => {
           setIsRateLimited(false);
         }, 60000);
@@ -45,7 +43,6 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
         toast.error("Something went wrong. Please try again.");
       }
     },
-    messages: [],
   });
 
   // @ts-ignore
@@ -101,10 +98,12 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                 )}
                 layoutId={`container-[${messages.length - 1}]`}
               >
-                <div className="px-3 py-2 text-[15px] leading-[15px]">
-                  {message.parts?.map((part: any, index: number) => (
-                    <span key={index}>{part.type === "text" && part.text}</span>
-                  ))}
+                <div className="px-3 py-2 text-[15px] leading-[20px] whitespace-pre-wrap">
+                  {message.parts?.map((part: any, index: number) =>
+                    part.type === "text" ? (
+                      <span key={index}>{part.text}</span>
+                    ) : null,
+                  )}
                 </div>
               </motion.div>
             ))}

@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import z from "zod";
 import { createTRPCRouter, privateProcedure } from "../trpc";
 import { db } from "~/server/db";
@@ -6,6 +7,8 @@ import { emailAddressSchema } from "~/types";
 import { Account } from "~/lib/account";
 import { OramaClient } from "~/lib/orama";
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { correlationKey } from "~/lib/email-correlation";
+import { getAttachmentInsightsForThread } from "~/lib/attachment-extractor";
 
 export const authoriseAccountAccess = async (
   accountId: string,
@@ -27,6 +30,38 @@ export const authoriseAccountAccess = async (
   if (!account) throw new Error("Unauthorized access to account");
   return account;
 };
+
+// module-scope throttle map
+const syncingByAccount = new Map<string, Promise<void>>();
+const lastSyncAt = new Map<string, number>();
+
+async function throttledSync(
+  accountId: string,
+  token: string,
+  minIntervalMs = 90_000,
+) {
+  const now = Date.now();
+  const last = lastSyncAt.get(accountId) || 0;
+  if (now - last < minIntervalMs) return; // too soon
+
+  // if a sync is in flight, don't start another
+  if (syncingByAccount.has(accountId)) return;
+
+  const task = (async () => {
+    try {
+      const acc = new Account(token);
+      await acc.syncEmails();
+      lastSyncAt.set(accountId, Date.now());
+    } catch (e) {
+      // swallow to avoid failing reads
+      console.error("throttledSync error", e);
+    } finally {
+      syncingByAccount.delete(accountId);
+    }
+  })();
+
+  syncingByAccount.set(accountId, task);
+}
 
 export const accountRouter = createTRPCRouter({
   getAccount: privateProcedure.query(async ({ ctx }) => {
@@ -90,8 +125,9 @@ export const accountRouter = createTRPCRouter({
         input.accountId,
         ctx.auth.userId,
       );
-      const acc = new Account(account.accessToken);
-      acc.syncEmails().catch(console.error);
+      // const acc = new Account(account.accessToken);
+      // acc.syncEmails().catch(console.error);
+      await throttledSync(account.id, account.accessToken);
 
       let filter: Prisma.ThreadWhereInput = {
         accountId: account.id,
@@ -162,6 +198,16 @@ export const accountRouter = createTRPCRouter({
               bodySnippet: true,
               emailLabel: true,
               sysLabels: true,
+              attachments: {
+                select: {
+                  id: true,
+                  name: true,
+                  mimeType: true,
+                  size: true,
+                  inline: true,
+                  contentId: true,
+                },
+              },
             },
           },
         },
@@ -252,7 +298,7 @@ export const accountRouter = createTRPCRouter({
     .input(
       z.object({
         accountId: z.string(),
-        body: z.string(),
+        body: z.string(), // HTML
         subject: z.string(),
         from: emailAddressSchema,
         cc: z.array(emailAddressSchema).optional(),
@@ -263,6 +309,18 @@ export const accountRouter = createTRPCRouter({
         inReplyTo: z.string().optional(),
 
         threadId: z.string().optional(),
+
+        attachments: z
+          .array(
+            z.object({
+              inline: z.boolean().optional(),
+              name: z.string(),
+              mimeType: z.string().optional(),
+              contentId: z.string().optional(),
+              content: z.string(), // base64 (no data: prefix)
+            }),
+          )
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -270,8 +328,11 @@ export const accountRouter = createTRPCRouter({
         input.accountId,
         ctx.auth.userId,
       );
+
       const acc = new Account(account.accessToken);
-      await acc.sendEmail({
+
+      // 1) Send via provider (returns ids; we’ll use internetMessageId if present)
+      const providerRes = await acc.sendEmail({
         body: input.body,
         subject: input.subject,
         from: input.from,
@@ -281,7 +342,142 @@ export const accountRouter = createTRPCRouter({
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         threadId: input.threadId,
+        attachments: input.attachments?.map((a) => ({
+          inline: a.inline,
+          name: a.name,
+          mimeType: a.mimeType,
+          contentId: a.contentId,
+          content: a.content,
+        })),
       });
+
+      // 2) Persist the message immediately in our DB so UI can serve attachments right away.
+      // Try to read a provider message id / internetMessageId if the API sent it back.
+      // Fallback to a generated placeholder if not provided.
+      const now = new Date();
+      const corrId = correlationKey({
+        subject: input.subject,
+        html: input.body,
+        toAddresses: input.to.map((t) => t.address),
+        ccAddresses: (input.cc || []).map((c) => c.address),
+        fromAddress: input.from.address,
+        now: now.getTime(),
+      });
+
+      // providerRes already fetched above
+      const internetMessageId: string =
+        providerRes?.internetMessageId ??
+        providerRes?.messageId ??
+        `local-${now.getTime()}-${Math.random().toString(36).slice(2)}`;
+
+      // try find an existing (very unlikely here) same internetMessageId
+      let emailRow = await ctx.db.email.findFirst({
+        where: { internetMessageId },
+        select: { id: true },
+      });
+
+      if (!emailRow) {
+        // ensure threadId exists (your code)
+        let threadId = input.threadId;
+        if (!threadId) {
+          const thread = await ctx.db.thread.create({
+            data: {
+              subject: input.subject || "(no subject)",
+              lastMessageDate: now,
+              participantIds: [],
+              accountId: account.id,
+              done: false,
+              inboxStatus: false,
+              draftStatus: false,
+              sentStatus: true,
+            },
+            select: { id: true },
+          });
+          threadId = thread.id;
+        }
+
+        const fromAddr = await ctx.db.emailAddress.upsert({
+          where: {
+            accountId_address: {
+              accountId: account.id,
+              address: input.from.address,
+            },
+          },
+          update: { name: input.from.name ?? null },
+          create: {
+            accountId: account.id,
+            address: input.from.address,
+            name: input.from.name ?? null,
+          },
+          select: { id: true },
+        });
+
+        emailRow = await ctx.db.email.create({
+          data: {
+            threadId,
+            createdTime: now,
+            lastModifiedTime: now,
+            sentAt: now,
+            receivedAt: now,
+            internetMessageId,
+            subject: input.subject || "(no subject)",
+            // 👇 add a "local" marker; will be removed on reconciliation
+            sysLabels: ["sent", "local"],
+            keywords: [],
+            sysClassifications: [],
+            sensitivity: "normal",
+            fromId: fromAddr.id,
+            hasAttachments: !!(input.attachments && input.attachments.length),
+            body: input.body,
+            bodySnippet: null,
+            inReplyTo: input.inReplyTo ?? null,
+            references: null,
+            threadIndex: null,
+            internetHeaders: [],
+            // 👇 store correlation id in nativeProperties (no schema change)
+            nativeProperties: { clientCorrelationId: corrId },
+            folderId: null,
+            omitted: [],
+            emailLabel: "sent",
+          },
+          select: { id: true },
+        });
+      } else {
+        await ctx.db.email.update({
+          where: { id: emailRow.id },
+          data: {
+            lastModifiedTime: now,
+            body: input.body,
+            hasAttachments: !!(input.attachments && input.attachments.length),
+            // ensure corrId is there
+            nativeProperties: { clientCorrelationId: corrId },
+            sysLabels: { set: ["sent", "local"] },
+          },
+        });
+      }
+
+      // 3) Insert the attachments with content = base64 so they’re viewable immediately
+      if (input.attachments?.length) {
+        const rows = input.attachments.map((a) => ({
+          name: a.name,
+          mimeType: a.mimeType ?? "application/octet-stream",
+          size:
+            Math.floor((a.content.length * 3) / 4) -
+            (a.content.endsWith("==") ? 2 : a.content.endsWith("=") ? 1 : 0),
+          inline: a.inline ?? false,
+          contentId: a.contentId ?? null,
+          content: a.content, // <-- store base64 bytes
+          contentLocation: null,
+          emailId: emailRow!.id,
+        }));
+        // simple: delete any prior attachments on this email (avoid dup on re-send)
+        await ctx.db.emailAttachment.deleteMany({
+          where: { emailId: emailRow!.id },
+        });
+        await ctx.db.emailAttachment.createMany({ data: rows });
+      }
+
+      return { ok: true, id: emailRow.id, internetMessageId };
     }),
 
   searchEmails: privateProcedure
@@ -323,9 +519,39 @@ export const accountRouter = createTRPCRouter({
               bodySnippet: true,
               emailLabel: true,
               sysLabels: true,
+              attachments: {
+                select: {
+                  id: true,
+                  name: true,
+                  mimeType: true,
+                  size: true,
+                  inline: true,
+                  contentId: true,
+                },
+              },
             },
           },
         },
       });
+    }),
+
+  getAttachmentInsights: privateProcedure
+    .input(
+      z.object({
+        accountId: z.string(),
+        threadId: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const account = await authoriseAccountAccess(
+        input.accountId,
+        ctx.auth.userId,
+      );
+      const t = await ctx.db.thread.findFirst({
+        where: { id: input.threadId, accountId: account.id },
+        select: { id: true },
+      });
+      if (!t) throw new Error("Thread not found");
+      return await getAttachmentInsightsForThread(input.threadId, 2);
     }),
 });

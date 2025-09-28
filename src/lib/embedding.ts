@@ -27,12 +27,10 @@ import { openai } from "@ai-sdk/openai";
 
 export async function getEmbeddings(text: string) {
   try {
-    // Add input validation
     if (!text || typeof text !== "string") {
       throw new Error("Text input is required and must be a string");
     }
 
-    // Clean the text
     const cleanText = text.replace(/\n/g, " ").trim();
 
     if (cleanText.length === 0) {
@@ -40,10 +38,9 @@ export async function getEmbeddings(text: string) {
     }
 
     const { embedding } = await embed({
-      model: openai.embedding("text-embedding-3-large"), // Use the new AI SDK format
+      model: openai.embedding("text-embedding-3-large"),
       value: cleanText,
     });
-
     return embedding;
   } catch (error) {
     console.log("error calling openai embeddings api", error);

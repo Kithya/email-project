@@ -10,31 +10,48 @@ export async function generateEmail(context: string, prompt: string) {
 
   (async () => {
     const { textStream } = await streamText({
-      model: openai("gpt-5"),
+      model: openai("gpt-5-mini"),
       prompt: `
-            You are an AI email assistant embedded in an email client app. Your purpose is to help the user compose emails by providing suggestions and relevant information based on the context of their previous emails.
-            
-            THE TIME NOW IS ${new Date().toLocaleString()}
-            
-            START CONTEXT BLOCK
-            ${context}
-            END OF CONTEXT BLOCK
-            
-            USER PROMPT:
-            ${prompt}
-            
-            When responding, please keep in mind:
-            - Be helpful, clever, and articulate. 
-            - Rely on the provided email context to inform your response.
-            - If the context does not contain enough information to fully address the prompt, politely give a draft response.
-            - Avoid apologizing for previous responses. Instead, indicate that you have updated your knowledge based on new information.
-            - Do not invent or speculate about anything that is not directly supported by the email context.
-            - Keep your response focused and relevant to the user's prompt.
-            - Don't add fluff like 'Heres your email' or 'Here's your email' or anything like that.
-            - Directly output the email, no need to say 'Here is your email' or anything like that.
-            - No need to output subject
-            `,
+          ALWAYS RESPOND IN PLAIN TEXT. Do not use HTML or Markdown. Do not include a subject line.
+
+          You are an AI email assistant for a professional business setting. Draft a clear, concise, well-formatted email reply based ONLY on the CONTEXT and the USER PROMPT.
+
+          CURRENT TIME: ${new Date().toLocaleString()}
+
+          CONTEXT START
+          ${context}
+          CONTEXT END
+
+          USER PROMPT:
+          ${prompt}
+
+          STYLE & TONE REQUIREMENTS:
+          - Professional, courteous, confident, and concise.
+          - Avoid filler and apologies; focus on clarity and action.
+          - Use clean email formatting in plain text.
+
+          WHEN ATTACHMENT EVIDENCE IS PRESENT (the CONTEXT contains "ATTACHMENT EVIDENCE:"):
+          - Treat the attachment evidence as the primary source of truth.
+          - If referencing specific figures, dates, clauses, or terms, mention the filename once in parentheses, e.g., (see Proposal.pdf).
+          - Never invent information that is not supported by the evidence.
+
+          FORMAT (PLAIN TEXT):
+          1) Greeting line (e.g., "Hello <Name>," or "Hello,").
+          2) One-sentence purpose/opening that directly addresses the thread.
+          3) Main body:
+            - Use short paragraphs and, where helpful, "-" bullet points for key points, decisions, or highlights.
+            - If applicable, reference the attachment once as noted above.
+          4) Next steps / request (numbered or bulleted as appropriate).
+          5) Polite closing line.
+          6) Signature block using the sender details available in context (name and email if present).
+
+          CONSTRAINTS:
+          - No subject line, no markdown, no HTML.
+          - Keep it tight (roughly 90–180 words) unless the prompt requires more.
+          - Do not add meta text like "Here is your email".
+      `,
     });
+
     for await (const token of textStream) {
       stream.update(token);
     }
@@ -62,6 +79,15 @@ export async function generate(input: string) {
             keep the tone of the text consistent with the rest of the text.
             keep the response short and sweet. Act like a copilot, finish my sentence if need be, but don't try to generate a whole new paragraph.
             Do not add fluff like "I'm here to help you" or "I'm a helpful AI" or anything like that.
+
+
+            CONSTRAINTS:
+            - Continue the *current sentence* naturally.
+            - Aim for ~5 to 12 words, *one sentence max*.
+            - Do not start a new paragraph or list.
+            - Plain text only (no HTML, no markdown, no quotes).
+            - Do not add any meta text or apologies.
+            - Output must be directly concatenable to the user's text (no leading/trailing newlines).
 
             Example:
             Dear Alice, I'm sorry to hear that you are feeling down.

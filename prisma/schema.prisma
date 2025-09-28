@@ -115,7 +115,15 @@ model EmailAttachment {
   content         String?
   contentLocation String?
   emailId         String
+  contentHash     String?
+  docMeta         Json?
+  pagesCount      Int?
+  summary         String?
+  extractedText   String?
   Email           Email   @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+  @@index([contentHash])
 }
 
 enum EmailLabel {

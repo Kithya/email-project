@@ -5,31 +5,71 @@ import { auth } from "@clerk/nextjs/server";
 import { OramaClient } from "~/lib/orama";
 import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
+import type { TimeRange } from "~/types";
+import { db } from "~/server/db";
+import { isCountQuery, parseTimeRangeFromQuery, trimMessages, truncateToTokenLimit } from "~/lib/utils";
 
-// Helper function to estimate tokens (rough approximation: 1 token ≈ 4 characters)
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
 
-// Helper function to truncate text to fit within token limits
-function truncateToTokenLimit(text: string, maxTokens: number): string {
-  const estimatedTokens = estimateTokens(text);
-  if (estimatedTokens <= maxTokens) return text;
+async function maybeAnswerWithDbFacts({
+  accountId,
+  userQuery,
+}: {
+  accountId: string;
+  userQuery: string;
+}): Promise<{ answer: string } | null> {
+  const tr = parseTimeRangeFromQuery(userQuery);
+  if (!tr || !isCountQuery(userQuery)) return null;
 
-  const ratio = maxTokens / estimatedTokens;
-  const targetLength = Math.floor(text.length * ratio * 0.9); // 10% buffer
-  return text.substring(0, targetLength) + "...";
-}
+  const emails = await db.email.findMany({
+    where: {
+      thread: { accountId },
+      sentAt: { gte: tr.start, lt: tr.end },
+    },
+    select: {
+      id: true,
+      subject: true,
+      sentAt: true,
+      from: {
+        select: {
+          address: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      sentAt: "desc",
+    },
+    take: 50,
+  });
 
-// Helper function to keep only recent messages
-function trimMessages(messages: any[], maxMessages: number = 10) {
-  if (messages.length <= maxMessages) return messages;
+  const count = emails.length;
+  const top = emails.slice(0, 10).map((e) => {
+    const fromLabel = e.from?.name
+      ? `${e.from.name} <${e.from.address}>`
+      : (e.from?.address ?? "(unknown)");
+    return `• ${e.subject || "(no subject)"} — from ${fromLabel} — ${e.sentAt.toISOString()}`;
+  });
 
-  // Keep system message (if any) and last N messages
-  const systemMessages = messages.filter((msg) => msg.role === "system");
-  const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
+  const facts = [
+    `Time range: ${tr.label}`,
+    `Email count: ${count}`,
+    ...(count > 0 ? ["Recent items:", ...top] : []),
+  ].join("\n");
 
-  return [...systemMessages, ...nonSystemMessages.slice(-maxMessages)];
+  const { textStream } = await streamText({
+    model: openai("gpt-5-mini"),
+    system: `You are an assistant. ONLY use the provided facts to answer. Do not guess.`,
+    prompt: `User asked: "${userQuery}"
+
+        Facts (authoritative):
+        ${facts}
+
+        Respond succinctly. If user asked "how many", state the count clearly first. Mention UTC.`,
+  });
+
+  let out = "";
+  for await (const chunk of textStream) out += chunk;
+  return { answer: out.trim() || `You recieved ${count} emails ${tr.label}.` };
 }
 
 export async function POST(req: Request) {
@@ -50,7 +90,6 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1];
     console.log("lastmessage", lastMessage);
 
-    // Extract search term from the last message
     let searchTerm = "";
     if (lastMessage?.content) {
       searchTerm = lastMessage.content;
@@ -68,61 +107,65 @@ export async function POST(req: Request) {
       );
     }
 
-    // OPTIMIZATION 1: Limit search results and context
+    const structured = await maybeAnswerWithDbFacts({
+      accountId,
+      userQuery: searchTerm,
+    });
+    if (structured) {
+      const result = await streamText({
+        model: openai("gpt-5-mini"),
+        system: "You respond in 1-3 concise sentences.",
+        // @ts-ignore
+        prompt: structured.answer,
+      });
+      return result.toUIMessageStreamResponse();
+    }
+
     const context = await orama.vectorSearch({
       term: searchTerm,
     });
 
-    // Limit to top 3 most relevant results instead of 10
-    const limitedHits = context.hits.slice(0, 3);
+    const MAX_HITS = 15;
+    const limitedHits = context.hits.slice(0, MAX_HITS);
     console.log(
       `Using ${limitedHits.length} hits instead of ${context.hits.length}`,
     );
 
-    // OPTIMIZATION 2: Truncate context to prevent token overflow
-    const maxContextTokens = 8000; // Reserve tokens for context
+    const maxContextTokens = 8000;
     let contextText = limitedHits
       .map((hit) => {
         const doc = hit.document as any;
-        // Only include essential fields and truncate body
         return JSON.stringify({
           subject: doc.subject,
           from: doc.from,
-          to: doc.to?.[0] || doc.to, // Only first recipient
-          body: truncateToTokenLimit(doc.body || doc.rawBody || "", 200), // Max 200 tokens per email body
+          to: doc.to?.[0] || doc.to,
+          body: truncateToTokenLimit(doc.body || doc.rawBody || "", 120),
           sentAt: doc.sentAt,
         });
       })
       .join("\n");
 
-    // Ensure total context doesn't exceed limit
     contextText = truncateToTokenLimit(contextText, maxContextTokens);
 
-    // OPTIMIZATION 3: Simplified system message
     const systemMessage = `You are an AI email assistant. Current time: ${new Date().toLocaleString()}
 
-CONTEXT:
-${contextText}
+      CONTEXT:
+      ${contextText}
 
-Instructions:
-- Answer based on provided email context
-- Be concise and helpful
-- If insufficient context, say so politely
-- Don't speculate beyond the provided information`;
+      Instructions:
+      - Answer based on provided email context
+      - Be concise and helpful
+      - If insufficient context, say so politely
+      - Don't speculate beyond the provided information`;
 
-    // OPTIMIZATION 4: Limit message history
-    const trimmedMessages = trimMessages(messages, 6); // Keep last 6 messages only
+    const trimmedMessages = trimMessages(messages, 6);
 
-    // Convert UIMessage[] → ModelMessage[]
     const modelMessages = convertToModelMessages(trimmedMessages);
 
-    // OPTIMIZATION 5: Set token limits
     const result = await streamText({
-      model: openai("gpt-5-mini"), // Most efficient model
+      model: openai("gpt-5"),
       system: systemMessage,
       messages: modelMessages,
-      maxOutputTokens: 1000, // Limit response length
-      temperature: 0.3, // Lower temperature for more focused responses
       // @ts-ignore
       onStart: async () => {
         console.log("stream started");

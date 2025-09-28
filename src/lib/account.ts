@@ -1,6 +1,7 @@
 import {
   type EmailAddress,
   type EmailMessage,
+  type OutgoingEmailAttachment,
   type SyncResponse,
   type SyncUpdatedResponse,
 } from "~/types";
@@ -173,6 +174,7 @@ export class Account {
     cc,
     bcc,
     replyTo,
+    attachments,
   }: {
     from: EmailAddress;
     subject: string;
@@ -184,6 +186,7 @@ export class Account {
     cc?: EmailAddress[];
     bcc?: EmailAddress[];
     replyTo?: EmailAddress;
+    attachments?: OutgoingEmailAttachment[];
   }) {
     try {
       const response = await axios.post(
@@ -199,17 +202,21 @@ export class Account {
           cc,
           bcc,
           replyTo: [replyTo],
+          attachments,
         },
         {
           params: {
             returnIds: true,
+            bodyType: "html",
           },
           headers: {
             Authorization: `Bearer ${this.token}`,
           },
         },
       );
+
       console.log("Email sent", response.data);
+      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         console.error(
@@ -221,5 +228,13 @@ export class Account {
       }
       throw error;
     }
+  }
+
+  async getAttachmentContent(messageId: string, attachmentId: string) {
+    const res = await axios.get<{ content?: string }>(
+      `https://api.aurinko.io/v1/email/messages/${messageId}/attachments/${attachmentId}`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+    );
+    return res.data?.content; // base64
   }
 }

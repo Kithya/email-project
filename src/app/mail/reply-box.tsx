@@ -1,17 +1,23 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import EmailEditor from "./email-editor";
 import { api, type RouterOutputs } from "~/trpc/react";
 import useThreads from "~/hooks/use-threads";
 import { toast } from "sonner";
+import type { AttachmentInput } from "~/types";
 
 const ReplyBox = () => {
   const { threadId, accountId } = useThreads();
-  const { data: replyDetails } = api.account.getReplyDetails.useQuery({
-    threadId: threadId ?? "",
-    accountId,
-  });
+  const { data: replyDetails } = api.account.getReplyDetails.useQuery(
+    {
+      threadId: threadId ?? "",
+      accountId,
+    },
+    {
+      enabled: !!threadId && !!accountId,
+    },
+  );
 
   if (!replyDetails) return null;
 
@@ -61,42 +67,39 @@ const Component = ({
     setCcValues(
       replyDetails.cc.map((cc) => ({ label: cc.address, value: cc.address })),
     );
-  }, [threadId, accountId]);
+  }, [threadId, accountId, replyDetails]);
+
+  const [attachments, setAttachments] = React.useState<AttachmentInput[]>([]);
 
   const sendEmail = api.account.sendEmail.useMutation();
 
-  const handleSend = async (value: string) => {
+  const handleSend = async (html: string, atts?: AttachmentInput[]) => {
     if (!replyDetails) return;
 
     sendEmail.mutate(
       {
         accountId,
         threadId: threadId ?? undefined,
-        body: value,
+        body: html,
         subject,
         from: replyDetails.from,
-        to: replyDetails.to.map((to) => ({
-          address: to.address,
-          name: to.name ?? "",
-        })),
-        cc: replyDetails.cc.map((cc) => ({
-          address: cc.address,
-          name: cc.name ?? "",
-        })),
+        to: toValues.map((t) => ({ address: t.value, name: t.label ?? "" })),
+        cc: ccValues.map((c) => ({ address: c.value, name: c.label ?? "" })),
         replyTo: replyDetails.from,
         inReplyTo: replyDetails.id,
+        attachments: atts && atts.length ? atts : undefined,
       },
       {
         onSuccess: () => {
           toast.success("Email sent");
+          // reset composer bits
+          setAttachments([]);
         },
         onError: () => {
           toast.error("Failed to send email");
         },
       },
     );
-
-    console.log(value);
   };
 
   return (
@@ -107,9 +110,12 @@ const Component = ({
       setToValue={setToValues}
       ccValues={ccValues}
       setCcValue={setCcValues}
-      to={replyDetails.to.map((to) => to.address)}
+      to={toValues.map((t) => t.value)}
       handleSend={handleSend}
       isSending={sendEmail.isPending}
+      defaultToolbarExpand={false}
+      attachments={attachments}
+      setAttachments={setAttachments}
     />
   );
 };

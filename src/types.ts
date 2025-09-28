@@ -1,3 +1,4 @@
+import type { DecorationSet } from "@tiptap/pm/view";
 import { z } from "zod";
 
 export interface SyncResponse {
@@ -21,7 +22,7 @@ export interface EmailMessage {
   threadId: string;
   createdTime: string;
   lastModifiedTime: string;
-  sentAt: string;
+  sentAt: string | Date;
   receivedAt: string;
   internetMessageId: string;
   subject: string;
@@ -82,3 +83,47 @@ export interface EmailHeader {
   name: string;
   value: string;
 }
+
+export type OutgoingEmailAttachment = {
+  name: string;
+  content: string;
+  mimeType?: string;
+  inline?: boolean;
+  contentId?: string;
+};
+
+export type AttachmentInput = {
+  inline?: boolean;
+  name: string;
+  mimeType?: string;
+  contentId?: string;
+  content: string; // base64
+};
+
+export type MinimalAttachment = {
+  id: string;
+  name: string;
+  mimeType: string | null;
+  inline: boolean | null;
+  size: number | null;
+  content: string | null; // base64
+  contentLocation: string | null;
+};
+
+export type DateLike = string | number | Date;
+
+export type TimeRange = { start: Date; end: Date; label: string };
+
+export type Suggestion = {
+  id: string;
+  type: "spelling" | "grammar" | "style";
+  message: string;
+  replacement?: string;
+  start: number; 
+  end: number;
+};
+
+export type SuggestionsStorage = {
+  suggestions: Suggestion[];
+  deco: DecorationSet;
+};
