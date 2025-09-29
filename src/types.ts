@@ -119,11 +119,17 @@ export type Suggestion = {
   type: "spelling" | "grammar" | "style";
   message: string;
   replacement?: string;
-  start: number; 
+  start: number;
   end: number;
 };
 
 export type SuggestionsStorage = {
   suggestions: Suggestion[];
   deco: DecorationSet;
+};
+
+export type TelegramResult = {
+  ok: boolean;
+  messageId?: number;
+  error?: string;
 };

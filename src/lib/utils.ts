@@ -1,6 +1,7 @@
 import type { EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { clsx, type ClassValue } from "clsx";
+import type { NextRequest } from "next/server";
 import { twMerge } from "tailwind-merge";
 import type { Suggestion, TimeRange } from "~/types";
 
@@ -190,4 +191,9 @@ export function maskPII(text: string) {
     });
   }
   return { masked, masks };
+}
+
+export function verifySecret(req: NextRequest) {
+  const secret = req.headers.get("x-telegram-bot-api-secret-token");
+  return secret && secret === process.env.TELEGRAM_WEBHOOK_SECRET;
 }

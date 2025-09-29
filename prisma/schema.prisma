@@ -14,6 +14,8 @@ model User {
   lastName     String
   imageUrl     String?
   accounts     Account[]
+
+  UserNotificationSettings UserNotificationSettings[]
 }
 
 model Account {
@@ -145,4 +147,51 @@ enum MeetingMessageMethod {
   cancel
   counter
   other
+}
+
+model UserNotificationSettings {
+  userId             String        @id
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramEnabled    Boolean       @default(true)
+  telegramChatId     String?
+  timezone           String        @default("Asia/Phnom_Penh")
+  quietHoursStart    String        @default("21:00") // 24h, local to user's tz
+  quietHoursEnd      String        @default("08:00")
+
+  // simple, secure linking via deep link token
+  pendingLinkToken   String?
+  pendingLinkExpires DateTime?
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model FollowUpTask {
+  id                    String   @id @default(cuid())
+  userId                String
+  accountId             String
+  threadId              String
+  lastOutboundEmailId   String
+  lastOutboundSentAt    DateTime
+  subjectSnippet        String
+  recipientAddresses    String[]
+  dueAt                 DateTime
+  status                FollowUpStatus @default(scheduled)
+  cancelReason          String?
+  channel               String   @default("telegram")
+  idempotencyKey        String   @unique
+  telegramMessageId     String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status, dueAt])
+  @@index([threadId, status, dueAt])
+  @@index([userId, dueAt])
+}
+
+enum FollowUpStatus {
+  scheduled
+  cancelled
+  sent
+  snoozed
 }

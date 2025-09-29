@@ -41,7 +41,7 @@ export async function POST(req: Request) {
           type,
           message: m.message || "Issue detected",
           replacement,
-          start: m.offset, // LanguageTool gives plain-text char offsets
+          start: m.offset, 
           end: m.offset + m.length,
         };
       });
