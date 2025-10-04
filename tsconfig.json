@@ -9,6 +9,7 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    "allowArbitraryExtensions": true,
 
     /* Strictness */
     "strict": true,
@@ -24,6 +25,8 @@
     "plugins": [{ "name": "next" }],
     "incremental": true,
 
+    "ignoreDeprecations": "6.0",
+
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
@@ -36,7 +39,8 @@
     "**/*.tsx",
     "**/*.cjs",
     "**/*.js",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "postcss.config.mjs"
   ],
   "exclude": ["node_modules"]
 }

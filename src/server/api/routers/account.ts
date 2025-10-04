@@ -9,6 +9,7 @@ import { OramaClient } from "~/lib/orama";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { correlationKey } from "~/lib/email-correlation";
 import { getAttachmentInsightsForThread } from "~/lib/attachment-extractor";
+import { notifyFollowups } from "~/lib/notify-followup";
 
 export const authoriseAccountAccess = async (
   accountId: string,
@@ -462,55 +463,19 @@ export const accountRouter = createTRPCRouter({
         });
         await ctx.db.emailAttachment.createMany({ data: rows });
       }
+
       try {
-        const settings = await ctx.db.userNotificationSettings.findUnique({
-          where: { userId: ctx.auth.userId },
-          select: {
-            telegramEnabled: true,
-            telegramChatId: true,
-            timezone: true,
-          },
-        });
-
-        if (settings?.telegramEnabled && settings?.telegramChatId) {
-          const emailWithThread = await ctx.db.email.findUnique({
-            where: { id: emailRow!.id },
-            select: { threadId: true },
+        const primaryTo = input.to[0]?.address;
+        if (primaryTo) {
+          await notifyFollowups({
+            to: primaryTo,
+            subject: input.subject,
+            from: input.from.address,
+            threadId: providerRes?.threadId ?? input.threadId,
           });
-          const finalThreadId = emailWithThread?.threadId ?? input.threadId;
-          if (!finalThreadId) {
-            console.error("follow-up: cannot resolve threadId");
-          } else {
-            await ctx.db.followUpTask.updateMany({
-              where: { threadId: finalThreadId, status: "scheduled" },
-              data: {
-                status: "cancelled",
-                cancelReason: "superseded_by_new_outbound",
-              },
-            });
-
-            const dueAt = new Date(Date.now() + 2 * 60 * 1000);
-            await ctx.db.followUpTask.upsert({
-              where: { idempotencyKey: internetMessageId },
-              update: {},
-              create: {
-                userId: ctx.auth.userId!,
-                accountId: account.id,
-                threadId: finalThreadId,
-                lastOutboundEmailId: emailRow!.id,
-                lastOutboundSentAt: now,
-                subjectSnippet: (input.subject || "(no subject)").slice(0, 180),
-                recipientAddresses: input.to.map((t) => t.address),
-                dueAt,
-                status: "scheduled",
-                channel: "telegram",
-                idempotencyKey: internetMessageId,
-              },
-            });
-          }
         }
       } catch (e) {
-        console.error("follow-up create task failed", e);
+        console.error("notifyFollowup failed:", e);
       }
 
       return { ok: true, id: emailRow.id, internetMessageId };

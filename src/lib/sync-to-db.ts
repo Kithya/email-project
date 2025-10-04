@@ -167,22 +167,6 @@ async function upsertEmailWithReconciliation(
         },
         select: { id: true, sysLabels: true },
       });
-
-      try {
-        if (emailLabelType === "inbox") {
-          await db.followUpTask.updateMany({
-            where: {
-              threadId: thread.id,
-              status: "scheduled",
-              dueAt: { gt: new Date() },
-              lastOutboundSentAt: { lt: new Date(email.sentAt) },
-            },
-            data: { status: "cancelled", cancelReason: "reply_detected" },
-          });
-        }
-      } catch (e) {
-        console.error("follow-up cancel on inbound failed", e);
-      }
     } catch {}
   }
 

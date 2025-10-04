@@ -192,8 +192,3 @@ export function maskPII(text: string) {
   }
   return { masked, masks };
 }
-
-export function verifySecret(req: NextRequest) {
-  const secret = req.headers.get("x-telegram-bot-api-secret-token");
-  return secret && secret === process.env.TELEGRAM_WEBHOOK_SECRET;
-}

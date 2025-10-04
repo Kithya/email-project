@@ -127,9 +127,3 @@ export type SuggestionsStorage = {
   suggestions: Suggestion[];
   deco: DecorationSet;
 };
-
-export type TelegramResult = {
-  ok: boolean;
-  messageId?: number;
-  error?: string;
-};
