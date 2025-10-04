@@ -12,9 +12,7 @@ const config = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    serverComponentsExternalPackages: ["pdf-parse", "mammoth"],
-  },
+  serverExternalPackages: ["pdf-parse", "mammoth"],
 };
 
 export default config;
