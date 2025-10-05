@@ -10,7 +10,7 @@ export async function generateEmail(context: string, prompt: string) {
 
   (async () => {
     const { textStream } = await streamText({
-      model: openai("gpt-5-mini"),
+      model: openai("gpt-4-turbo"),
       prompt: `
           ALWAYS RESPOND IN PLAIN TEXT. Do not use HTML or Markdown. Do not include a subject line.
 
@@ -67,7 +67,7 @@ export async function generate(input: string) {
   console.log("input", input);
   (async () => {
     const { textStream } = await streamText({
-      model: openai("gpt-5"),
+      model: openai("gpt-4-turbo"),
       prompt: `
             ALWAYS RESPOND IN PLAIN TEXT, no html or markdown.
             You are a helpful AI embedded in a email client app that is used to autocomplete sentences, similar to google gmail autocomplete

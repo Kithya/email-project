@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     const user = `SOURCE TEXT:\n${text}`;
     const { textStream } = await streamText({
-      model: openai("gpt-5-mini"),
+      model: openai("gpt-5-nano"),
       system,
       prompt: user,
     });
