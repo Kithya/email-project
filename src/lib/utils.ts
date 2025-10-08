@@ -105,7 +105,7 @@ export function buildDecorations(
 
     decos.push(
       Decoration.inline(from, to, {
-        class: `${className}`,
+        class: className,
         title: s.message,
       }),
     );
@@ -114,23 +114,29 @@ export function buildDecorations(
 }
 
 export function mapOffsetToDoc(state: EditorState, offset: number) {
-  const fullText = state.doc.textBetween(0, state.doc.content.size, "\n", "\n");
-  if (offset < 0 || offset > fullText.length) return null;
+  const total = state.doc.textBetween(
+    0,
+    state.doc.content.size,
+    "\n",
+    "\n",
+  ).length;
+  if (offset < 0) return 0;
+  if (offset > total) return state.doc.content.size;
 
-  let consumed = 0;
-  let pos = 0;
-  state.doc.descendants((node, nodePos) => {
-    if (!node.isText) return true;
-    const text = node.text ?? "";
-    const next = consumed + text.length;
-    if (offset <= next) {
-      pos = nodePos + (offset - consumed);
-      return false;
-    }
-    consumed = next;
-    return true;
-  });
-  return pos;
+  let lo = 0;
+  let hi = state.doc.content.size;
+  while (lo < hi) {
+    const mid = ((lo + hi) / 2) | 0;
+    const len = state.doc.textBetween(0, mid, "\n", "\n").length;
+    if (len < offset) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+export function docPosToPlainOffset(state: EditorState, pos: number) {
+  const p = Math.max(0, Math.min(pos, state.doc.content.size));
+  return state.doc.textBetween(0, p, "\n", "\n").length;
 }
 
 export function findSuggestionAtSelection(
@@ -138,34 +144,8 @@ export function findSuggestionAtSelection(
   suggestions: Suggestion[],
 ) {
   const { from, to } = state.selection;
-  // Convert selection to plain-text offsets by scanning forward
-  let consumed = 0;
-  let selStart = 0;
-  let selEnd = 0;
-
-  state.doc.descendants((node, nodePos) => {
-    if (!node.isText) return true;
-    const text = node.text ?? "";
-    const nFrom = nodePos;
-    const nTo = nodePos + text.length;
-
-    if (nTo < from) {
-      consumed += text.length;
-      return true;
-    }
-
-    if (selStart === 0 && from >= nFrom && from <= nTo) {
-      selStart = consumed + (from - nFrom);
-    }
-    if (to >= nFrom && to <= nTo) {
-      selEnd = consumed + (to - nFrom);
-      return false;
-    }
-    consumed += text.length;
-    return true;
-  });
-
-  if (selEnd === 0) selEnd = selStart;
+  const selStart = docPosToPlainOffset(state, from);
+  const selEnd = docPosToPlainOffset(state, to);
 
   return suggestions.find(
     (s) =>
@@ -174,21 +154,17 @@ export function findSuggestionAtSelection(
 }
 
 export function maskPII(text: string) {
-  const masks: { token: string; value: string }[] = [];
-  let masked = text;
+  const repeat = (len: number) => "█".repeat(Math.max(1, len));
 
   const rules = [
-    { re: /[\w.+-]+@[\w.-]+\.\w+/g, tag: "EMAIL" },
-    { re: /\b(\+?\d[\d\s\-().]{6,})\b/g, tag: "PHONE" },
-    { re: /\b(\$|USD|€|EUR|£|GBP)\s?\d[\d,]*(\.\d+)?\b/g, tag: "MONEY" },
+    { re: /[\w.+-]+@[\w.-]+\.\w+/g }, // emails
+    { re: /\b(\+?\d[\d\s\-().]{6,})\b/g }, // phones
+    { re: /\b(\$|USD|€|EUR|£|GBP)\s?\d[\d,]*(\.\d+)?\b/g }, // money
   ];
 
-  for (const { re, tag } of rules) {
-    masked = masked.replace(re, (m) => {
-      const token = `[[${tag}_${masks.length}]]`;
-      masks.push({ token, value: m });
-      return token;
-    });
+  let masked = text;
+  for (const { re } of rules) {
+    masked = masked.replace(re, (m) => repeat(m.length));
   }
-  return { masked, masks };
+  return { masked };
 }

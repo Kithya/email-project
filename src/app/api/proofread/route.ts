@@ -1,3 +1,4 @@
+// /api/proofread/route.ts (or similar)
 import { NextResponse } from "next/server";
 import { maskPII } from "~/lib/utils";
 
@@ -7,6 +8,7 @@ export async function POST(req: Request) {
   try {
     const { text, locale = "en-US", limit = 25 } = await req.json();
 
+    // Length-preserving mask => LT offsets match the original string
     const { masked } = maskPII(text);
 
     const form = new URLSearchParams();
@@ -14,14 +16,28 @@ export async function POST(req: Request) {
     form.set("language", locale);
     form.set("enabledOnly", "false");
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
     const res = await fetch(LT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form.toString(),
+      signal: controller.signal,
+    }).catch((e) => {
+      return new Response(null, {
+        status: 599,
+        statusText: (e as Error).message,
+      });
     });
 
-    if (!res.ok) {
-      return NextResponse.json({ suggestions: [] });
+    clearTimeout(timeout);
+
+    if (!res || !res.ok) {
+      return NextResponse.json(
+        { suggestions: [], error: "lt_unavailable" },
+        { status: 200 },
+      );
     }
 
     const data = await res.json();
@@ -41,13 +57,16 @@ export async function POST(req: Request) {
           type,
           message: m.message || "Issue detected",
           replacement,
-          start: m.offset, 
+          start: m.offset, // aligned to original now
           end: m.offset + m.length,
         };
       });
 
     return NextResponse.json({ suggestions });
   } catch (error) {
-    return NextResponse.json({ suggestions: [] });
+    return NextResponse.json(
+      { suggestions: [], error: "unknown" },
+      { status: 200 },
+    );
   }
 }

@@ -176,3 +176,19 @@
   margin-top: 2.33em;
   margin-bottom: 2.33em;
 }
+
+.df-underline-spelling {
+  text-decoration: underline dotted;
+  text-decoration-color: rgba(239, 68, 68, 0.9);
+  text-underline-offset: 3px;
+}
+.df-underline-grammar {
+  text-decoration: underline wavy;
+  text-decoration-color: rgba(234, 179, 8, 0.9);
+  text-underline-offset: 3px;
+}
+.df-underline-style {
+  text-decoration: underline dotted;
+  text-decoration-color: rgba(59, 130, 246, 0.9);
+  text-underline-offset: 3px;
+}

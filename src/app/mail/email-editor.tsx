@@ -2,8 +2,9 @@
 
 import React, { useCallback, useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { StarterKit } from "@tiptap/starter-kit";
-import { Text } from "@tiptap/extension-text";
+// 🔧 Use default exports (safer across versions)
+import StarterKit from "@tiptap/starter-kit";
+import Text from "@tiptap/extension-text";
 import EditorMenuBar from "./editor-menubar";
 import { Separator } from "~/components/ui/separator";
 import { Button } from "~/components/ui/button";
@@ -79,7 +80,6 @@ const EmailEditor = ({
   const attachments = attachmentsProp ?? attachmentsLocal;
   const setAttachments = setAttachmentsProp ?? setAttachmentsLocal;
 
-  // Live language assistant state
   const [activeSuggestion, setActiveSuggestion] =
     React.useState<Suggestion | null>(null);
   const [popupPos, setPopupPos] = React.useState<{
@@ -89,13 +89,12 @@ const EmailEditor = ({
   const proofreadTimer = React.useRef<number | null>(null);
   const lastProofreadText = React.useRef<string>("");
 
-  // Improve writing modal
   const [improveOpen, setImproveOpen] = React.useState(false);
   const [tone, setTone] = React.useState<"Neutral" | "Friendly" | "Formal">(
     "Neutral",
   );
+  const [isImproving, setIsImproving] = React.useState(false);
 
-  // AI autocomplete (unchanged)
   const aiGenerate = async (text: string) => {
     const { output } = await generate(text);
     for await (const t of readStreamableValue(output)) {
@@ -114,7 +113,6 @@ const EmailEditor = ({
     },
   });
 
-  // Initialize TipTap (hooks always run, no early return)
   const editor = useEditor({
     autofocus: false,
     extensions: [
@@ -132,7 +130,6 @@ const EmailEditor = ({
     immediatelyRender: false,
   });
 
-  // Insert small autocomplete tokens directly
   React.useEffect(() => {
     if (!editor || !token) return;
     editor.commands.insertContent(token);
@@ -186,12 +183,20 @@ const EmailEditor = ({
     if (sug) {
       const from =
         mapOffsetToDoc(ed.state, sug.start) ?? ed.state.selection.from;
-      const rect = ed.view.coordsAtPos(from);
+      let rect: DOMRect;
+      try {
+        rect = ed.view.coordsAtPos(from);
+      } catch {
+        setPopupPos(null);
+        return;
+      }
       const containerRect = ed.view.dom.getBoundingClientRect();
-      setPopupPos({
-        top: rect.bottom - containerRect.top + 6,
-        left: rect.left - containerRect.left,
-      });
+      const rawTop = rect.bottom - containerRect.top + 6;
+      const rawLeft = rect.left - containerRect.left;
+      const maxLeft = containerRect.width - 220;
+      const top = Math.max(0, rawTop);
+      const left = Math.max(0, Math.min(rawLeft, maxLeft));
+      setPopupPos({ top, left });
     } else {
       setPopupPos(null);
     }
@@ -230,12 +235,10 @@ const EmailEditor = ({
     setPopupPos(null);
   };
 
-  // AI Compose final insert
   const onGenerate = (html: string) => {
     editor?.commands.insertContent(html);
   };
 
-  // File -> base64
   const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
     let binary = "";
     const bytes = new Uint8Array(buffer);
@@ -271,27 +274,62 @@ const EmailEditor = ({
     setAttachments(merged);
   };
 
-  // Improve writing
+  const escapeHtml = (s: string) =>
+    s.replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c]!,
+    );
+
+  const plainToHtml = (plain: string) => {
+    const paras = plain
+      .split(/\n{2,}/)
+      .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
+      .join("");
+    return paras || "<p></p>";
+  };
+
   const handleImproveWriting = async () => {
     if (!editor) return;
-    const text = editor.getText();
-    const res = await fetch("/api/improve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, tone }),
-    });
-    const data = await res.json();
-    const improved: string = data.improvedText || text;
+    setIsImproving(true);
+    try {
+      const text = editor.getText();
+      const res = await fetch("/api/improve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, tone }),
+      });
 
-    // Insert as simple HTML line breaks; keep minimal to avoid messing TipTap nodes
-    editor.commands.setContent(improved.replace(/\n/g, "<br/>"));
-    setImproveOpen(false);
+      const data = await res.json();
+      const improved: string = data.improvedText || "";
+
+      if (!improved.trim()) {
+        console.warn("[improve] empty or invalid response", data);
+        return;
+      }
+
+      const html = plainToHtml(improved);
+      // @ts-ignore
+      editor.commands.setContent(html, false);
+      lastProofreadText.current = ""; 
+      scheduleProofread();
+    } catch (e) {
+      console.error("[improve] failed", e);
+    } finally {
+      setIsImproving(false);
+      setImproveOpen(false); 
+    }
   };
 
   return (
     <div className="relative">
       <div className="flex border-b p-4 py-2">
-        {/* Render toolbar only when editor is ready to avoid null access */}
         {editor ? (
           <EditorMenuBar
             editor={editor}
@@ -341,7 +379,6 @@ const EmailEditor = ({
           />
         </div>
 
-        {/* attachments strip */}
         {attachments && attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((a, idx) => (
@@ -365,7 +402,6 @@ const EmailEditor = ({
         )}
       </div>
 
-      {/* Recommendation popup (Replace / Ignore) */}
       {editor && activeSuggestion && popupPos && (
         <div
           className="bg-popover absolute z-50 rounded-md border px-3 py-2 text-sm shadow-md"
@@ -379,6 +415,7 @@ const EmailEditor = ({
               size="sm"
               onClick={applyActiveSuggestion}
               disabled={!activeSuggestion.replacement}
+              title="Enter / Tab"
             >
               Replace
             </Button>
@@ -386,6 +423,7 @@ const EmailEditor = ({
               size="sm"
               variant="outline"
               onClick={ignoreActiveSuggestion}
+              title="Esc"
             >
               Ignore
             </Button>
@@ -423,8 +461,10 @@ const EmailEditor = ({
         </div>
       </div>
 
-      {/* Improve Writing modal (minimal) */}
-      <Dialog open={improveOpen} onOpenChange={setImproveOpen}>
+      <Dialog
+        open={improveOpen}
+        onOpenChange={(open) => !isImproving && setImproveOpen(open)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Improve writing</DialogTitle>
@@ -432,7 +472,11 @@ const EmailEditor = ({
           <div className="space-y-3">
             <div>
               <p className="mb-1 text-sm font-medium">Tone</p>
-              <Select value={tone} onValueChange={(v) => setTone(v as any)}>
+              <Select
+                value={tone}
+                onValueChange={(v) => setTone(v as any)}
+                disabled={isImproving}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Tone" />
                 </SelectTrigger>
@@ -448,10 +492,16 @@ const EmailEditor = ({
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImproveOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setImproveOpen(false)}
+              disabled={isImproving}
+            >
               Cancel
             </Button>
-            <Button onClick={handleImproveWriting}>Apply</Button>
+            <Button onClick={handleImproveWriting} disabled={isImproving}>
+              {isImproving ? "Improving…" : "Apply"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

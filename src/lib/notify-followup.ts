@@ -21,7 +21,7 @@ export async function notifyFollowups({
 
   const payload = {
     to,
-    yourGmail: "narakithya@gmail.com",
+    yourGmail: "kithyanara@gmail.com",
     subject,
     sentAt,
     from,
