@@ -10,6 +10,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { correlationKey } from "~/lib/email-correlation";
 import { getAttachmentInsightsForThread } from "~/lib/attachment-extractor";
 import { notifyFollowups } from "~/lib/notify-followup";
+import { FREE_CREDITS_PER_DAY } from "~/lib/data";
 
 export const authoriseAccountAccess = async (
   accountId: string,
@@ -555,4 +556,18 @@ export const accountRouter = createTRPCRouter({
       if (!t) throw new Error("Thread not found");
       return await getAttachmentInsightsForThread(input.threadId, 2);
     }),
+  getChatbotInteraction: privateProcedure.query(async ({ ctx }) => {
+    const chatbotInteraction = await ctx.db.chatbotInteraction.findUnique({
+      where: {
+        day: new Date().toDateString(),
+        userId: ctx.auth.userId,
+      },
+      select: { count: true },
+    });
+    const remainingCredits =
+      FREE_CREDITS_PER_DAY - (chatbotInteraction?.count || 0);
+    return {
+      remainingCredits,
+    };
+  }),
 });

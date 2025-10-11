@@ -12,7 +12,6 @@ const useThreads = () => {
   const [done] = useLocalStorage("email-done", false);
   const [threadId, setThreadId] = useAtom(threadIdAtom);
 
-  // Current page (resets when account/tab/done changes)
   const [page, setPage] = React.useState(1);
   React.useEffect(() => {
     setPage(1);
@@ -22,7 +21,6 @@ const useThreads = () => {
     { accountId, tab, done, page, pageSize: 15 },
     {
       enabled: !!accountId && !!tab,
-      // NOTE: remove keepPreviousData to satisfy your typings
       refetchInterval: 5000,
     },
   );

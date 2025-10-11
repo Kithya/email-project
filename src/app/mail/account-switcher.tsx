@@ -13,6 +13,7 @@ import {
 import { cn } from "~/lib/utils";
 import { Plus } from "lucide-react";
 import { getAurinkoAuthUrl } from "~/lib/aurinko";
+import { toast } from "sonner";
 
 type Prop = {
   isCollapsed: boolean;
@@ -53,8 +54,13 @@ const AccountSwitcher = ({ isCollapsed }: Prop) => {
         ))}
         <div
           onClick={async () => {
-            const authUrl = await getAurinkoAuthUrl("Google");
-            window.location.href = authUrl;
+            try {
+              const authUrl = await getAurinkoAuthUrl("Google");
+              window.location.href = authUrl;
+            } catch (error) {
+              // @ts-ignore
+              toast.error(error.message);
+            }
           }}
           className="focus:bg-accent relative flex w-full cursor-pointer items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none hover:bg-gray-50"
         >

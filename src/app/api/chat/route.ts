@@ -7,8 +7,14 @@ import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import type { TimeRange } from "~/types";
 import { db } from "~/server/db";
-import { isCountQuery, parseTimeRangeFromQuery, trimMessages, truncateToTokenLimit } from "~/lib/utils";
-
+import {
+  isCountQuery,
+  parseTimeRangeFromQuery,
+  trimMessages,
+  truncateToTokenLimit,
+} from "~/lib/utils";
+import { getSubscriptionStatus } from "~/lib/stripe-actions";
+import { FREE_ACCOUNTS_PER_USER } from "~/lib/data";
 
 async function maybeAnswerWithDbFacts({
   accountId,
@@ -73,11 +79,35 @@ async function maybeAnswerWithDbFacts({
 }
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
+  const today = new Date().toDateString();
 
   try {
+    const { userId } = await auth();
     if (!userId) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    const isSubscribed = await getSubscriptionStatus();
+    if (!isSubscribed) {
+      const chatbotInteraction = await db.chatbotInteraction.findUnique({
+        where: {
+          day: today,
+          userId,
+        },
+      });
+      if (!chatbotInteraction) {
+        await db.chatbotInteraction.create({
+          data: {
+            day: today,
+            userId,
+            count: 1,
+          },
+        });
+      } else if (chatbotInteraction.count >= FREE_ACCOUNTS_PER_USER) {
+        return new Response("You have reached the free limit for today", {
+          status: 429,
+        });
+      }
     }
 
     const { accountId, messages } = await req.json();
@@ -171,6 +201,17 @@ export async function POST(req: Request) {
         console.log("stream started");
       },
       onFinish: async ({ text, usage }) => {
+        await db.chatbotInteraction.update({
+          where: {
+            day: today,
+            userId,
+          },
+          data: {
+            count: {
+              increment: 1,
+            },
+          },
+        });
         console.log("stream complete", text);
         console.log("Token usage:", usage);
       },

@@ -8,11 +8,14 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import useThreads from "~/hooks/use-threads";
 import { toast } from "sonner";
+import PremiumBanner from "./premium-banner";
+import { api } from "~/trpc/react";
 
 const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
   const { accountId } = useThreads();
   const [input, setInput] = useState("");
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const utils = api.useUtils();
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
@@ -43,6 +46,9 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
         toast.error("Something went wrong. Please try again.");
       }
     },
+    onFinish: () => {
+      utils.account.getChatbotInteraction.refetch();
+    },
   });
 
   // @ts-ignore
@@ -66,7 +72,8 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
 
   return (
     <div className="mb-14 p-4">
-      <div className="h-4"></div>
+      <PremiumBanner />
+      <div className="h-4" />
       <motion.div className="flex flex-1 flex-col items-end justify-end rounded-lg border bg-gray-100 p-4 pb-4 shadow-inner dark:bg-gray-900">
         {/* Rate limit warning */}
         {isRateLimited && (
