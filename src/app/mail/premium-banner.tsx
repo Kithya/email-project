@@ -5,15 +5,18 @@ import StripeButton from "./stripe-button";
 import { api } from "~/trpc/react";
 import { getSubscriptionStatus } from "~/lib/stripe-actions";
 import { FREE_CREDITS_PER_DAY } from "~/lib/data";
+import { useSearchParams } from "next/navigation";
 
 const PremiumBanner = () => {
   const [isSubscribed, setIsSubscribed] = React.useState(false);
+  const search = useSearchParams();
+
   React.useEffect(() => {
     (async () => {
       const subscriptionStatus = await getSubscriptionStatus();
       setIsSubscribed(subscriptionStatus);
     })();
-  }, []);
+  }, [search?.get("upgrade")]); // refetch after successful upgrade redirect
 
   const { data: chatbotInteraction } =
     api.account.getChatbotInteraction.useQuery();

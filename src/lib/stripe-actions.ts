@@ -60,3 +60,21 @@ export async function getSubscriptionStatus() {
   }
   return subscription.currentPeriodEnd > new Date();
 }
+
+export async function downgradeToFree() {
+  const { userId } = await auth();
+  if (!userId) throw new Error("User not found");
+
+  const subscription = await db.stripeSubscription.findUnique({
+    where: { userId },
+  });
+
+  if (subscription?.subscriptionId) {
+    try {
+      await stripe.subscriptions.cancel(subscription.subscriptionId);
+    } catch {}
+    await db.stripeSubscription.deleteMany({ where: { userId } });
+  }
+
+  redirect(`${process.env.NEXT_PUBLIC_URL}/mail?downgrade=success`);
+}

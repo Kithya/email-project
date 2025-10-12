@@ -19,40 +19,32 @@ export async function POST(req: Request) {
     return new NextResponse("webhook error", { status: 400 });
   }
 
-  const session = event.data.object as Stripe.Checkout.Session;
-  console.log(event.type);
+  console.log("stripe webhook:", (event as any).id, event.type);
 
   // new subscription created
   if (event.type === "checkout.session.completed") {
-    const subscription = await stripe.subscriptions.retrieve(
+    const session = event.data.object as Stripe.Checkout.Session;
+
+    const subscriptionResp = await stripe.subscriptions.retrieve(
       session.subscription as string,
-      {
-        expand: ["items.data.price.product"],
-      },
+      { expand: ["items.data.price.product"] },
     );
-    if (!session?.client_reference_id) {
-      return new NextResponse("no userid", { status: 400 });
-    }
+    const subscription = subscriptionResp as unknown as Stripe.Subscription;
+
     const plan = subscription.items.data[0]?.price;
+    const productId =
+      typeof plan?.product === "string"
+        ? plan.product
+        : (plan?.product as Stripe.Product).id;
 
-    if (!plan) {
-      throw new Error("No plan found for this subscription.");
-    }
-
-    const productId = (plan.product as Stripe.Product).id;
-
-    if (!productId) {
-      throw new Error("No product ID found for this subscription.");
-    }
-
-    const stripeSubscription = await db.stripeSubscription.create({
+    await db.stripeSubscription.create({
       data: {
         subscriptionId: subscription.id,
-        productId: productId,
-        priceId: plan.id,
+        productId,
+        priceId: plan!.id,
         customerId: subscription.customer as string,
         currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        userId: session.client_reference_id,
+        userId: session.client_reference_id!,
       },
     });
 
@@ -60,52 +52,74 @@ export async function POST(req: Request) {
   }
 
   if (event.type === "invoice.payment_succeeded") {
-    const invoice = event.data.object as Stripe.Invoice;
-    const subscriptionId = (invoice as any).subscription as string;
+    const invoice = event.data.object as Stripe.Invoice & {
+      subscription?: string | Stripe.Subscription | null;
+    };
+
+    const subscriptionId =
+      typeof invoice.subscription === "string"
+        ? invoice.subscription
+        : (invoice.subscription?.id ?? "");
 
     if (!subscriptionId) {
       return new NextResponse("No subscription ID found", { status: 400 });
     }
 
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-      expand: ["items.data.price.product"],
-    });
+    const subscriptionResp = await stripe.subscriptions.retrieve(
+      subscriptionId,
+      {
+        expand: ["items.data.price.product"],
+      },
+    );
+    const subscription = subscriptionResp as unknown as Stripe.Subscription;
 
     const plan = subscription.items.data[0]?.price;
-
-    if (!plan) {
-      throw new Error("No plan found for this subscription.");
-    }
-
-    const productId = (plan.product as Stripe.Product).id;
+    const productId =
+      typeof plan?.product === "string"
+        ? plan.product
+        : (plan?.product as Stripe.Product).id;
 
     await db.stripeSubscription.update({
-      where: {
-        subscriptionId: subscription.id,
-      },
+      where: { subscriptionId: subscription.id },
       data: {
         currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        productId: productId,
-        priceId: plan.id,
+        productId,
+        priceId: plan!.id,
       },
     });
+
     return NextResponse.json({ message: "success" }, { status: 200 });
   }
 
   if (event.type === "customer.subscription.updated") {
-    console.log("subscription updated", session);
-    const subscription = await stripe.subscriptions.retrieve(
-      session.id as string,
+    const sub = event.data.object as Stripe.Subscription;
+    console.log(
+      "subscription updated",
+      sub.id,
+      sub.status,
+      sub.cancel_at_period_end,
     );
+
     await db.stripeSubscription.update({
-      where: {
-        subscriptionId: session.id as string,
-      },
+      where: { subscriptionId: sub.id },
       data: {
         updatedAt: new Date(),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodEnd: new Date(sub.current_period_end * 1000),
       },
     });
+
+    return NextResponse.json({ message: "success" }, { status: 200 });
+  }
+
+  // NEW: handle immediate deletion (downgrade to Free instantly)
+  if (event.type === "customer.subscription.deleted") {
+    const sub = event.data.object as Stripe.Subscription;
+    console.log("subscription deleted", sub.id);
+
+    await db.stripeSubscription.deleteMany({
+      where: { subscriptionId: sub.id },
+    });
+
     return NextResponse.json({ message: "success" }, { status: 200 });
   }
 

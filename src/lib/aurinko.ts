@@ -15,18 +15,12 @@ export const getAurinkoAuthUrl = async (
   const isSubscribed = await getSubscriptionStatus();
   const accounts = await db.account.count({ where: { userId } });
 
-  if (isSubscribed) {
-    if (accounts >= PRO_ACCOUNTS_PER_USER) {
-      throw new Error(
-        "You have reached the maximum number of accounts for your subcsription",
-      );
-    } else {
-      if (accounts >= FREE_ACCOUNTS_PER_USER) {
-        throw new Error(
-          "You have reached the maximum number of accounts for your subcsription",
-        );
-      }
-    }
+  const limit = isSubscribed ? PRO_ACCOUNTS_PER_USER : FREE_ACCOUNTS_PER_USER;
+
+  if (accounts >= limit) {
+    throw new Error(
+      "You have reached the maximum number of accounts for your subscription",
+    );
   }
 
   const params = new URLSearchParams({

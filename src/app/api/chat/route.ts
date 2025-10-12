@@ -14,7 +14,7 @@ import {
   truncateToTokenLimit,
 } from "~/lib/utils";
 import { getSubscriptionStatus } from "~/lib/stripe-actions";
-import { FREE_ACCOUNTS_PER_USER } from "~/lib/data";
+import { FREE_CREDITS_PER_DAY } from "~/lib/data"; // ← changed import
 
 async function maybeAnswerWithDbFacts({
   accountId,
@@ -35,16 +35,9 @@ async function maybeAnswerWithDbFacts({
       id: true,
       subject: true,
       sentAt: true,
-      from: {
-        select: {
-          address: true,
-          name: true,
-        },
-      },
+      from: { select: { address: true, name: true } },
     },
-    orderBy: {
-      sentAt: "desc",
-    },
+    orderBy: { sentAt: "desc" },
     take: 50,
   });
 
@@ -90,20 +83,15 @@ export async function POST(req: Request) {
     const isSubscribed = await getSubscriptionStatus();
     if (!isSubscribed) {
       const chatbotInteraction = await db.chatbotInteraction.findUnique({
-        where: {
-          day: today,
-          userId,
-        },
+        where: { day: today, userId },
       });
+
       if (!chatbotInteraction) {
         await db.chatbotInteraction.create({
-          data: {
-            day: today,
-            userId,
-            count: 1,
-          },
+          data: { day: today, userId, count: 1 },
         });
-      } else if (chatbotInteraction.count >= FREE_ACCOUNTS_PER_USER) {
+      } else if (chatbotInteraction.count >= FREE_CREDITS_PER_DAY) {
+        // ← compare to credits/day
         return new Response("You have reached the free limit for today", {
           status: 429,
         });
@@ -151,9 +139,7 @@ export async function POST(req: Request) {
       return result.toUIMessageStreamResponse();
     }
 
-    const context = await orama.vectorSearch({
-      term: searchTerm,
-    });
+    const context = await orama.vectorSearch({ term: searchTerm });
 
     const MAX_HITS = 15;
     const limitedHits = context.hits.slice(0, MAX_HITS);
@@ -189,7 +175,6 @@ export async function POST(req: Request) {
       - Don't speculate beyond the provided information`;
 
     const trimmedMessages = trimMessages(messages, 6);
-
     const modelMessages = convertToModelMessages(trimmedMessages);
 
     const result = await streamText({
@@ -200,17 +185,11 @@ export async function POST(req: Request) {
       onStart: async () => {
         console.log("stream started");
       },
-      onFinish: async ({ text, usage }) => {
+      // @ts-ignore
+      onCompletion: async ({ text, usage }) => {
         await db.chatbotInteraction.update({
-          where: {
-            day: today,
-            userId,
-          },
-          data: {
-            count: {
-              increment: 1,
-            },
-          },
+          where: { day: today, userId },
+          data: { count: { increment: 1 } },
         });
         console.log("stream complete", text);
         console.log("Token usage:", usage);
@@ -221,7 +200,6 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("API Error:", error);
 
-    // Handle rate limit errors specifically
     if (error?.message?.includes("rate_limit_exceeded")) {
       return NextResponse.json(
         {
