@@ -317,13 +317,13 @@ const EmailEditor = ({
       const html = plainToHtml(improved);
       // @ts-ignore
       editor.commands.setContent(html, false);
-      lastProofreadText.current = ""; 
+      lastProofreadText.current = "";
       scheduleProofread();
     } catch (e) {
       console.error("[improve] failed", e);
     } finally {
       setIsImproving(false);
-      setImproveOpen(false); 
+      setImproveOpen(false);
     }
   };
 
@@ -370,7 +370,7 @@ const EmailEditor = ({
             className="cursor-pointer"
             onClick={() => setExpanded(!expanded)}
           >
-            <span className="font-medium text-green-600">Draft </span>
+            <span className="font-medium text-blue-500">Draft </span>
             <span>to {to.join(", ")}</span>
           </div>
           <AIComposeButton
