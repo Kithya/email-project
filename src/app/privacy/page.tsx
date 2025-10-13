@@ -37,12 +37,12 @@ export default function Page() {
       <h2>Your Choices</h2>
       <p>
         Disconnect accounts anytime and request deletion at{" "}
-        <a href="mailto:narakithya0@gmail.com">narakithya0@gmail.com</a>.
+        <a href="mailto:narakithya0@gmail.com">narakithya@gmail.com</a>.
       </p>
       <h2>Contact</h2>
       <p>
         Questions:{" "}
-        <a href="mailto:narakithya0@gmail.com">narakithya0@gmail.com</a>
+        <a href="mailto:narakithya0@gmail.com">narakithya@gmail.com</a>
       </p>
     </main>
   );

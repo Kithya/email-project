@@ -31,7 +31,7 @@ export default function Page() {
       </p>
       <h2>Contact</h2>
       <p>
-        <a href="mailto:narakithya0@gmail.com">narakithya0@gmail.com</a>
+        <a href="mailto:narakithya0@gmail.com">narakithya@gmail.com</a>
       </p>
     </main>
   );
