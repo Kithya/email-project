@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -13,7 +13,7 @@ import {
 } from "~/lib/stripe-actions";
 import { plans } from "~/lib/data";
 
-export default function PricingPage() {
+function PricingPageContent() {
   const [isSubscribed, setIsSubscribed] = React.useState(false);
   const [loadingKey, setLoadingKey] = React.useState<string | null>(null);
   const router = useRouter();
@@ -143,5 +143,13 @@ export default function PricingPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={null}>
+      <PricingPageContent />
+    </Suspense>
   );
 }
