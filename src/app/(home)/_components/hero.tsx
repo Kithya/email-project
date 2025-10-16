@@ -1,7 +1,10 @@
+// app/(home)/_components/hero.tsx (or wherever Hero lives)
 import Image from "next/image";
+import Link from "next/link";
 import React from "react";
 import { Button } from "~/components/ui/button";
 import hightlight from "../../../../public/highlight.png";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 
 const Hero = () => {
   return (
@@ -23,7 +26,6 @@ const Hero = () => {
           </p>
 
           <div className="bg-background/80 mx-auto mb-6 max-w-5xl rounded-2xl border p-3 shadow-sm">
-            {/* simple fake window top bar */}
             <div className="text-muted-foreground flex items-center gap-2 px-3 py-2 text-xs">
               <span className="h-3 w-3 rounded-full bg-red-400/70" />
               <span className="h-3 w-3 rounded-full bg-yellow-400/70" />
@@ -45,15 +47,33 @@ const Hero = () => {
           </div>
 
           <div className="mb-16 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            {/* Signed-out: open sign-in modal, then go to your protected app route */}
+            <SignedOut>
+              <SignInButton mode="modal" forceRedirectUrl="/mail">
+                <Button
+                  size="lg"
+                  className="rounded-4xl p-7 text-lg font-semibold"
+                >
+                  Start For Free
+                </Button>
+              </SignInButton>
+            </SignedOut>
+
+            {/* Signed-in: take users straight to app */}
+            <SignedIn>
+              <Link href="/mail"  >
+                <Button
+                  size="lg"
+                  className="rounded-4xl p-7 text-lg font-semibold"
+                >
+                  Go to Dashboard
+                </Button>
+              </Link>
+            </SignedIn>
+
             <Button
-              size={"lg"}
-              className="rounded-4xl p-7 text-lg font-semibold"
-            >
-              Start For Free
-            </Button>
-            <Button
-              variant={"outline"}
-              size={"lg"}
+              variant="outline"
+              size="lg"
               className="px-8 py-3 text-lg font-semibold"
             >
               Learn More
