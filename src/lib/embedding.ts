@@ -25,6 +25,8 @@
 import { embed } from "ai";
 import { openai } from "@ai-sdk/openai";
 
+const embeddingCache = new Map<string, number[]>();
+
 export async function getEmbeddings(text: string) {
   try {
     if (!text || typeof text !== "string") {
@@ -32,18 +34,23 @@ export async function getEmbeddings(text: string) {
     }
 
     const cleanText = text.replace(/\n/g, " ").trim();
-
     if (cleanText.length === 0) {
       throw new Error("Text input cannot be empty");
+    }
+
+    if (embeddingCache.has(cleanText)) {
+      return embeddingCache.get(cleanText)!;
     }
 
     const { embedding } = await embed({
       model: openai.embedding("text-embedding-3-large"),
       value: cleanText,
     });
+
+    embeddingCache.set(cleanText, embedding);
     return embedding;
   } catch (error) {
-    console.log("error calling openai embeddings api", error);
+    console.error("Error calling OpenAI embeddings API:", error);
     throw error;
   }
 }

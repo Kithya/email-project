@@ -5,7 +5,6 @@ import { auth } from "@clerk/nextjs/server";
 import { OramaClient } from "~/lib/orama";
 import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
-import type { TimeRange } from "~/types";
 import { db } from "~/server/db";
 import {
   isCountQuery,
@@ -14,7 +13,7 @@ import {
   truncateToTokenLimit,
 } from "~/lib/utils";
 import { getSubscriptionStatus } from "~/lib/stripe-actions";
-import { FREE_CREDITS_PER_DAY } from "~/lib/data"; // ← changed import
+import { FREE_CREDITS_PER_DAY } from "~/lib/data";
 
 async function maybeAnswerWithDbFacts({
   accountId,
@@ -58,57 +57,41 @@ async function maybeAnswerWithDbFacts({
   const { textStream } = await streamText({
     model: openai("gpt-5-mini"),
     system: `You are an assistant. ONLY use the provided facts to answer. Do not guess.`,
-    prompt: `User asked: "${userQuery}"
-
-        Facts (authoritative):
-        ${facts}
-
-        Respond succinctly. If user asked "how many", state the count clearly first. Mention UTC.`,
+    prompt: `User asked: "${userQuery}"\n\nFacts (authoritative):\n${facts}\n\nRespond succinctly. If user asked "how many", state the count clearly first. Mention UTC.`,
   });
 
   let out = "";
   for await (const chunk of textStream) out += chunk;
-  return { answer: out.trim() || `You recieved ${count} emails ${tr.label}.` };
+  return { answer: out.trim() || `You received ${count} emails ${tr.label}.` };
 }
 
 export async function POST(req: Request) {
   const today = new Date().toDateString();
 
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    const isSubscribed = await getSubscriptionStatus();
-    if (!isSubscribed) {
-      const chatbotInteraction = await db.chatbotInteraction.findUnique({
-        where: { day: today, userId },
-      });
-
-      if (!chatbotInteraction) {
-        await db.chatbotInteraction.create({
-          data: { day: today, userId, count: 1 },
-        });
-      } else if (chatbotInteraction.count >= FREE_CREDITS_PER_DAY) {
-        // ← compare to credits/day
-        return new Response("You have reached the free limit for today", {
-          status: 429,
-        });
-      }
-    }
+    const [{ userId }, isSubscribed] = await Promise.all([
+      auth(),
+      getSubscriptionStatus(),
+    ]);
+    if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const { accountId, messages } = await req.json();
+    if (!accountId || !messages) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 },
+      );
+    }
 
-    console.log("Received messages:", JSON.stringify(messages, null, 2));
-
-    const orama = new OramaClient(accountId);
-    await orama.initialize();
+    const account = await db.account.findFirst({
+      where: { id: accountId, userId },
+    });
+    if (!account) return new Response("Unauthorized account", { status: 403 });
 
     const lastMessage = messages[messages.length - 1];
     console.log("lastmessage", lastMessage);
-
     let searchTerm = "";
+
     if (lastMessage?.content) {
       searchTerm = lastMessage.content;
     } else if (lastMessage?.parts) {
@@ -125,19 +108,34 @@ export async function POST(req: Request) {
       );
     }
 
-    const structured = await maybeAnswerWithDbFacts({
-      accountId,
-      userQuery: searchTerm,
-    });
+    const [chatbotInteraction, structured] = await Promise.all([
+      db.chatbotInteraction.findUnique({ where: { day: today, userId } }),
+      maybeAnswerWithDbFacts({ accountId, userQuery: searchTerm }),
+    ]);
+
+    if (!isSubscribed) {
+      if (!chatbotInteraction) {
+        await db.chatbotInteraction.create({
+          data: { day: today, userId, count: 1 },
+        });
+      } else if (chatbotInteraction.count >= FREE_CREDITS_PER_DAY) {
+        return new Response("You have reached the free limit for today", {
+          status: 429,
+        });
+      }
+    }
+
     if (structured) {
       const result = await streamText({
         model: openai("gpt-5-mini"),
         system: "You respond in 1-3 concise sentences.",
-        // @ts-ignore
         prompt: structured.answer,
       });
       return result.toUIMessageStreamResponse();
     }
+
+    const orama = new OramaClient(accountId);
+    await orama.initialize();
 
     const context = await orama.vectorSearch({ term: searchTerm });
 
@@ -182,15 +180,15 @@ export async function POST(req: Request) {
       system: systemMessage,
       messages: modelMessages,
       // @ts-ignore
-      onStart: async () => {
-        console.log("stream started");
-      },
+      onStart: () => console.log("stream started"),
       // @ts-ignore
       onCompletion: async ({ text, usage }) => {
-        await db.chatbotInteraction.update({
-          where: { day: today, userId },
-          data: { count: { increment: 1 } },
-        });
+        db.chatbotInteraction
+          .update({
+            where: { day: today, userId },
+            data: { count: { increment: 1 } },
+          })
+          .catch(console.error);
         console.log("stream complete", text);
         console.log("Token usage:", usage);
       },

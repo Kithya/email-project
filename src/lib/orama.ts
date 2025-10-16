@@ -3,6 +3,8 @@ import { restore, persist } from "@orama/plugin-data-persistence";
 import { db } from "~/server/db";
 import { getEmbeddings } from "./embedding";
 
+const oramaCache = new Map<string, AnyOrama>(); // simple in-memory cache
+
 export class OramaClient {
   // @ts-ignore
   private orama: AnyOrama;
@@ -13,14 +15,24 @@ export class OramaClient {
   }
 
   private async saveIndex() {
-    const index = await persist(this.orama, "json");
-    await db.account.update({
-      where: { id: this.accountId },
-      data: { oramaIndex: index },
-    });
+    try {
+      const index = await persist(this.orama, "json");
+      await db.account.update({
+        where: { id: this.accountId },
+        data: { oramaIndex: index },
+      });
+    } catch (error) {
+      console.error("Failed to persist Orama index:", error);
+    }
   }
 
   async initialize() {
+    // check cache first
+    if (oramaCache.has(this.accountId)) {
+      this.orama = oramaCache.get(this.accountId)!;
+      return;
+    }
+
     const account = await db.account.findUnique({
       where: { id: this.accountId },
       select: { oramaIndex: true },
@@ -30,12 +42,14 @@ export class OramaClient {
     if (account.oramaIndex) {
       try {
         this.orama = await restore("json", account.oramaIndex as any);
+        oramaCache.set(this.accountId, this.orama);
         return;
-      } catch {
-        // fall through to recreate index
+      } catch (err) {
+        console.warn("Orama restore failed, recreating index:", err);
       }
     }
 
+    // create new if not restored
     this.orama = await create({
       schema: {
         subject: "string",
@@ -49,6 +63,7 @@ export class OramaClient {
       },
     });
 
+    oramaCache.set(this.accountId, this.orama);
     await this.saveIndex();
   }
 
@@ -59,7 +74,7 @@ export class OramaClient {
         mode: "hybrid",
         term,
         vector: { value: embedding, property: "embedding" },
-        similarity: 0.7, 
+        similarity: 0.7,
         limit: Math.min(limit, 20),
       });
       return results;
@@ -80,7 +95,9 @@ export class OramaClient {
     if (document.rawBody && document.rawBody.length > 2000) {
       document.rawBody = document.rawBody.slice(0, 2000) + "...";
     }
+
     await insert(this.orama, document);
-    await this.saveIndex();
+    // save index asynchronously (non-blocking)
+    this.saveIndex().catch(console.error);
   }
 }
