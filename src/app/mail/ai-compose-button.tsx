@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot } from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
 import React from "react";
 import { Button } from "~/components/ui/button";
 import {
@@ -26,16 +26,12 @@ type Props = {
 function plainTextToHtml(text: string): string {
   const escapeHtml = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
   const blocks = text.trim().split(/\n{2,}/);
-
   const htmlBlocks = blocks.map((block) => {
     const lines = block.split(/\n/);
-
     const isList =
       lines.some((l) => l.trim().length > 0) &&
       lines.every((l) => l.trim() === "" || /^[\s]*([-\*\u2022])\s+/.test(l));
-
     if (isList) {
       const items = lines
         .map((l) => l.trim())
@@ -45,106 +41,142 @@ function plainTextToHtml(text: string): string {
         .join("");
       return `<ul>${items}</ul>`;
     }
-
     return `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`;
   });
-
   return htmlBlocks.join("");
 }
 
 const AIComposeButton = (props: Props) => {
   const [open, setOpen] = React.useState(false);
   const [prompt, setPrompt] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
   const { threads, threadId, account } = useThreads();
   const thread = threads?.find((t) => t.id === threadId);
   const utils = api.useUtils();
 
-  const aiGenerate = async () => {
-    let context = "";
-
-    if (!props.isComposing) {
-      for (const email of thread?.emails ?? []) {
-        const content = `
-              Subject: ${email.subject}
-              From: ${email.from}
-              Sent: ${new Date(email.sentAt).toLocaleString()}
-              Body: ${turndown.turndown(email.body ?? email.bodySnippet ?? "")}
-              `;
-        context += content + "\n\n";
-      }
-    }
-    context += `My name is ${account?.name} and my email is ${account?.emailAddress}\n\n`;
-
-    let attachmentsBlock = "";
+  const aiGenerate = async (promptSnapshot: string) => {
+    setIsLoading(true);
     try {
-      if (thread?.id && account?.id) {
-        const insights = await utils.account.getAttachmentInsights.fetch({
-          accountId: account.id,
-          threadId: thread.id,
-        });
+      let context = "";
 
-        console.log("[AI Compose] Attachment insights", insights);
-
-        if (insights && insights.length) {
-          attachmentsBlock += "ATTACHMENT EVIDENCE:\n";
-          for (const a of insights) {
-            attachmentsBlock += `File: ${a.name}\nSummary: ${a.summary}\nExcerpt: ${a.snippet}\n\n`;
-          }
-          console.log(
-            "[AI Compose] Evidence block preview:",
-            attachmentsBlock.slice(0, 800) +
-              (attachmentsBlock.length > 800 ? "…(truncated)" : ""),
-          );
-        } else {
-          console.log(
-            "[AI Compose] No attachment evidence; proceeding with email-only context.",
-          );
+      if (!props.isComposing) {
+        for (const email of thread?.emails ?? []) {
+          const content = `
+Subject: ${email.subject}
+From: ${email.from}
+Sent: ${new Date(email.sentAt).toLocaleString()}
+Body: ${turndown.turndown(email.body ?? email.bodySnippet ?? "")}
+`;
+          context += content + "\n\n";
         }
       }
-    } catch (e) {
-      console.log("[AI Compose] getAttachmentInsights failed", e);
-    }
+      context += `My name is ${account?.name} and my email is ${account?.emailAddress}\n\n`;
 
-    const { output } = await generateEmail(context + attachmentsBlock, prompt);
+      let attachmentsBlock = "";
+      try {
+        if (thread?.id && account?.id) {
+          const insights = await utils.account.getAttachmentInsights.fetch({
+            accountId: account.id,
+            threadId: thread.id,
+          });
+          if (insights && insights.length) {
+            attachmentsBlock += "ATTACHMENT EVIDENCE:\n";
+            for (const a of insights) {
+              attachmentsBlock += `File: ${a.name}\nSummary: ${a.summary}\nExcerpt: ${a.snippet}\n\n`;
+            }
+          }
+        }
+      } catch (e) {
+        console.log("[AI Compose] getAttachmentInsights failed", e);
+      }
 
-    let fullText = "";
-    for await (const token of readStreamableValue(output)) {
-      if (token) fullText += token;
+      const { output } = await generateEmail(
+        context + attachmentsBlock,
+        promptSnapshot,
+      );
+
+      let fullText = "";
+      for await (const token of readStreamableValue(output)) {
+        if (token) fullText += token;
+      }
+      const html = plainTextToHtml(fullText);
+      props.onGenerate(html);
+      setOpen(false); // close only after success
+    } finally {
+      setIsLoading(false);
     }
-    const html = plainTextToHtml(fullText);
-    props.onGenerate(html);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      // prevent closing while loading (feels safer)
+      onOpenChange={(next) => {
+        if (isLoading) return;
+        setOpen(next);
+      }}
+    >
       <DialogTrigger asChild>
-        <Button size={"icon"} variant={"outline"}>
-          <Bot className="size-5" />
+        <Button size="icon" variant="outline" aria-busy={isLoading}>
+          {isLoading ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <Bot className="size-5" />
+          )}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+
+      <DialogContent aria-busy={isLoading}>
         <DialogHeader>
           <DialogTitle>Smart AI Compose</DialogTitle>
           <DialogDescription>
             AI will help you compose your email
           </DialogDescription>
+
           <div className="h-2" />
+
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Enter a prompt."
+            disabled={isLoading}
           />
+
           <div className="h-2" />
-          <Button
-            onClick={() => {
-              setOpen(false);
-              const p = prompt; // capture
-              setPrompt("");
-              aiGenerate();
-            }}
-          >
-            Generate
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              disabled={isLoading}
+              onClick={() => {
+                const p = prompt.trim();
+                setPrompt("");
+                void aiGenerate(p);
+              }}
+            >
+              {isLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Generating…
+                </span>
+              ) : (
+                "Generate"
+              )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+          </div>
+
+          {isLoading && (
+            <div className="mt-3 text-xs text-neutral-500">
+              This can take a few seconds. Please keep this window open.
+            </div>
+          )}
         </DialogHeader>
       </DialogContent>
     </Dialog>
