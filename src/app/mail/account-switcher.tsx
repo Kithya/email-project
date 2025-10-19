@@ -59,7 +59,9 @@ const AccountSwitcher = ({ isCollapsed }: Prop) => {
               window.location.href = authUrl;
             } catch (error) {
               // @ts-ignore
-              toast.error(error.message);
+              toast.error(
+                "You have reached the maximum number of accounts for your subscription",
+              );
             }
           }}
           className="focus:bg-accent relative flex w-full cursor-pointer items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none hover:bg-gray-50"
