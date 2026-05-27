@@ -18,7 +18,7 @@ const Hero = () => {
         <div className="mx-auto max-w-4xl text-center">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
             <Sparkles className="size-4" />
-            Portfolio-ready AI email assistant
+            AI email assistant
           </div>
 
           <h1 className="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-neutral-950 sm:text-5xl lg:text-6xl dark:text-white">
