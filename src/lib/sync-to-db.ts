@@ -5,7 +5,6 @@ import type {
   EmailAttachment,
   EmailMessage,
 } from "~/types";
-import pLimit from "p-limit";
 import { OramaClient } from "./orama";
 import { turndown } from "./turndown";
 import { getEmbeddings } from "./embedding";
@@ -22,16 +21,20 @@ export async function syncEmailsToDatabase(
   emails: EmailMessage[],
   accountId: string,
 ) {
-  console.log("attempting to sync emails to database", emails.length);
-
-  const limit = pLimit(10);
-
   const orama = new OramaClient(accountId);
-  await orama.initialize();
+  let indexReady = true;
+  await orama.initialize().catch((error) => {
+    indexReady = false;
+    console.error("Search index initialization failed:", error);
+  });
 
-  try {
-    for (const email of emails) {
-      const body = turndown.turndown(email.body ?? email.bodySnippet ?? "");
+  for (const email of emails) {
+    const body = turndown.turndown(email.body ?? email.bodySnippet ?? "");
+    await upsertEmailWithReconciliation(email, accountId);
+
+    if (!indexReady) continue;
+
+    try {
       const embedding = await getEmbeddings(body);
       await orama.insert({
         subject: email.subject,
@@ -43,11 +46,9 @@ export async function syncEmailsToDatabase(
         threadId: email.threadId,
         embedding,
       });
-
-      await upsertEmailWithReconciliation(email, accountId);
+    } catch (error) {
+      console.error("Email indexing skipped:", error);
     }
-  } catch (error) {
-    console.error("syncEmailsToDatabase error", error);
   }
 }
 
@@ -256,22 +257,19 @@ async function upsertEmailWithReconciliation(
       await upsertAttachment(targetEmailId, att);
     }
 
-    const limiter = pLimit(5);
     await Promise.all(
-      email.attachments.map((att) =>
-        limiter(async () => {
-          if (!att.id) return;
-          const mime = (att.mimeType || "").toLowerCase();
-          if (
-            mime.includes("pdf") ||
-            mime.includes("officedocument.wordprocessingml.document") ||
-            att.name?.toLowerCase().endsWith(".pdf") ||
-            att.name?.toLowerCase().endsWith(".docx")
-          ) {
-            await ensureAttachmentProcessed(att.id);
-          }
-        }),
-      ),
+      email.attachments.map(async (att) => {
+        if (!att.id) return;
+        const mime = (att.mimeType || "").toLowerCase();
+        if (
+          mime.includes("pdf") ||
+          mime.includes("officedocument.wordprocessingml.document") ||
+          att.name?.toLowerCase().endsWith(".pdf") ||
+          att.name?.toLowerCase().endsWith(".docx")
+        ) {
+          await ensureAttachmentProcessed(att.id);
+        }
+      }),
     );
   }
 }

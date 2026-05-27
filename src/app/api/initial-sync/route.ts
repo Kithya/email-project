@@ -2,6 +2,11 @@ import { db } from "~/server/db";
 import { NextResponse, type NextRequest } from "next/server";
 import { Account } from "~/lib/account";
 import { syncEmailsToDatabase } from "~/lib/sync-to-db";
+import {
+  ensureDemoMailboxForUser,
+  isDemoAccount,
+  isDemoMode,
+} from "~/lib/demo-mailbox";
 
 export const POST = async (req: NextRequest) => {
   const { accountId, userId } = await req.json();
@@ -18,6 +23,21 @@ export const POST = async (req: NextRequest) => {
 
   if (!dbAccount)
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
+
+  if (isDemoMode() || isDemoAccount(dbAccount)) {
+    await ensureDemoMailboxForUser(userId);
+    return NextResponse.json(
+      { success: true, provider: "demo" },
+      { status: 200 },
+    );
+  }
+
+  if (!dbAccount.accessToken) {
+    return NextResponse.json(
+      { error: "Account is missing provider credentials" },
+      { status: 400 },
+    );
+  }
 
   const account = new Account(dbAccount.accessToken);
 

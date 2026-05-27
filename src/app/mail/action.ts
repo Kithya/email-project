@@ -1,7 +1,6 @@
 "use server";
 
 import { streamText } from "ai";
-import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { createStreamableValue } from "@ai-sdk/rsc";
 
@@ -64,7 +63,6 @@ export async function generateEmail(context: string, prompt: string) {
 export async function generate(input: string) {
   const stream = createStreamableValue("");
 
-  console.log("input", input);
   (async () => {
     const { textStream } = await streamText({
       model: openai("gpt-4-turbo"),

@@ -25,7 +25,7 @@
     "plugins": [{ "name": "next" }],
     "incremental": true,
 
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
 
     /* Path Aliases */
     "baseUrl": ".",

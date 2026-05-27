@@ -6,11 +6,15 @@ import type { Prisma } from "@prisma/client";
 import { emailAddressSchema } from "~/types";
 import { Account } from "~/lib/account";
 import { OramaClient } from "~/lib/orama";
-import { clerkMiddleware } from "@clerk/nextjs/server";
 import { correlationKey } from "~/lib/email-correlation";
 import { getAttachmentInsightsForThread } from "~/lib/attachment-extractor";
 import { notifyFollowups } from "~/lib/notify-followup";
 import { FREE_CREDITS_PER_DAY } from "~/lib/data";
+import {
+  ensureDemoMailboxForUser,
+  isDemoAccount,
+  isDemoMode,
+} from "~/lib/demo-mailbox";
 
 export const authoriseAccountAccess = async (
   accountId: string,
@@ -65,16 +69,36 @@ async function throttledSync(
 
 export const accountRouter = createTRPCRouter({
   getAccount: privateProcedure.query(async ({ ctx }) => {
-    return await ctx.db.account.findMany({
+    if (isDemoMode()) {
+      await ensureDemoMailboxForUser(ctx.auth.userId);
+    }
+
+    const accounts = await ctx.db.account.findMany({
       where: {
         userId: ctx.auth.userId,
       },
+      orderBy: { id: "asc" },
       select: {
         id: true,
         emailAddress: true,
         name: true,
+        accessToken: true,
       },
     });
+
+    return accounts
+      .map((account) => ({
+        id: account.id,
+        emailAddress: account.emailAddress,
+        name: account.name,
+        isDemo: isDemoAccount(account),
+      }))
+      .sort((a, b) => {
+        const order = ["Executive Demo", "Sales Demo", "Support Demo"];
+        const aIndex = order.indexOf(a.name);
+        const bIndex = order.indexOf(b.name);
+        return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+      });
   }),
 
   getNumThreads: privateProcedure
@@ -127,7 +151,12 @@ export const accountRouter = createTRPCRouter({
       );
       // const acc = new Account(account.accessToken);
       // acc.syncEmails().catch(console.error);
-      await throttledSync(account.id, account.accessToken);
+      if (!isDemoMode() && !isDemoAccount(account)) {
+        if (!account.accessToken) {
+          throw new Error("Account is missing provider credentials");
+        }
+        await throttledSync(account.id, account.accessToken);
+      }
 
       let filter: Prisma.ThreadWhereInput = {
         accountId: account.id,
@@ -329,28 +358,37 @@ export const accountRouter = createTRPCRouter({
         ctx.auth.userId,
       );
 
-      const acc = new Account(account.accessToken);
-
-      const providerRes = await acc.sendEmail({
-        body: input.body,
-        subject: input.subject,
-        from: input.from,
-        to: input.to,
-        cc: input.cc,
-        bcc: input.bcc,
-        replyTo: input.replyTo,
-        inReplyTo: input.inReplyTo,
-        threadId: input.threadId,
-        attachments: input.attachments?.map((a) => ({
-          inline: a.inline,
-          name: a.name,
-          mimeType: a.mimeType,
-          contentId: a.contentId,
-          content: a.content,
-        })),
-      });
+      const demoSend = isDemoMode() || isDemoAccount(account);
+      if (!demoSend && !account.accessToken) {
+        throw new Error("Account is missing provider credentials");
+      }
+      const providerRes = demoSend
+        ? null
+        : await new Account(account.accessToken!).sendEmail({
+            body: input.body,
+            subject: input.subject,
+            from: input.from,
+            to: input.to,
+            cc: input.cc,
+            bcc: input.bcc,
+            replyTo: input.replyTo,
+            inReplyTo: input.inReplyTo,
+            threadId: input.threadId,
+            attachments: input.attachments?.map((a) => ({
+              inline: a.inline,
+              name: a.name,
+              mimeType: a.mimeType,
+              contentId: a.contentId,
+              content: a.content,
+            })),
+          });
 
       const now = new Date();
+      const bodySnippet = input.body
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
       const corrId = correlationKey({
         subject: input.subject,
         html: input.body,
@@ -389,21 +427,42 @@ export const accountRouter = createTRPCRouter({
           threadId = thread.id;
         }
 
-        const fromAddr = await ctx.db.emailAddress.upsert({
-          where: {
-            accountId_address: {
-              accountId: account.id,
-              address: input.from.address,
-            },
-          },
-          update: { name: input.from.name ?? null },
-          create: {
-            accountId: account.id,
-            address: input.from.address,
-            name: input.from.name ?? null,
-          },
-          select: { id: true },
-        });
+        const addresses = [
+          input.from,
+          ...input.to,
+          ...(input.cc ?? []),
+          ...(input.bcc ?? []),
+          input.replyTo,
+        ];
+        const addressRows = await Promise.all(
+          addresses
+            .filter((address) => !!address.address)
+            .map((address) =>
+              ctx.db.emailAddress.upsert({
+                where: {
+                  accountId_address: {
+                    accountId: account.id,
+                    address: address.address,
+                  },
+                },
+                update: { name: address.name ?? null },
+                create: {
+                  accountId: account.id,
+                  address: address.address,
+                  name: address.name ?? null,
+                  raw: address.name
+                    ? `${address.name} <${address.address}>`
+                    : address.address,
+                },
+                select: { id: true, address: true },
+              }),
+            ),
+        );
+        const addressMap = new Map(
+          addressRows.map((address) => [address.address, address.id]),
+        );
+        const fromId = addressMap.get(input.from.address);
+        if (!fromId) throw new Error("Sender address could not be saved");
 
         emailRow = await ctx.db.email.create({
           data: {
@@ -418,10 +477,10 @@ export const accountRouter = createTRPCRouter({
             keywords: [],
             sysClassifications: [],
             sensitivity: "normal",
-            fromId: fromAddr.id,
+            fromId,
             hasAttachments: !!(input.attachments && input.attachments.length),
             body: input.body,
-            bodySnippet: null,
+            bodySnippet,
             inReplyTo: input.inReplyTo ?? null,
             references: null,
             threadIndex: null,
@@ -430,8 +489,41 @@ export const accountRouter = createTRPCRouter({
             folderId: null,
             omitted: [],
             emailLabel: "sent",
+            to: {
+              connect: input.to
+                .map((address) => addressMap.get(address.address))
+                .filter(Boolean)
+                .map((id) => ({ id: id! })),
+            },
+            cc: {
+              connect: (input.cc ?? [])
+                .map((address) => addressMap.get(address.address))
+                .filter(Boolean)
+                .map((id) => ({ id: id! })),
+            },
+            bcc: {
+              connect: (input.bcc ?? [])
+                .map((address) => addressMap.get(address.address))
+                .filter(Boolean)
+                .map((id) => ({ id: id! })),
+            },
+            replyTo: {
+              connect: [input.replyTo]
+                .map((address) => addressMap.get(address.address))
+                .filter(Boolean)
+                .map((id) => ({ id: id! })),
+            },
           },
           select: { id: true },
+        });
+
+        await ctx.db.thread.update({
+          where: { id: threadId },
+          data: {
+            lastMessageDate: now,
+            sentStatus: true,
+            participantIds: [...new Set(addressRows.map((row) => row.id))],
+          },
         });
       } else {
         await ctx.db.email.update({
@@ -439,6 +531,7 @@ export const accountRouter = createTRPCRouter({
           data: {
             lastModifiedTime: now,
             body: input.body,
+            bodySnippet,
             hasAttachments: !!(input.attachments && input.attachments.length),
             nativeProperties: { clientCorrelationId: corrId },
             sysLabels: { set: ["sent", "local"] },
@@ -467,7 +560,7 @@ export const accountRouter = createTRPCRouter({
 
       try {
         const primaryTo = input.to[0]?.address;
-        if (primaryTo) {
+        if (primaryTo && !demoSend) {
           await notifyFollowups({
             to: primaryTo,
             subject: input.subject,

@@ -5,12 +5,17 @@ import axios from "axios";
 import { getSubscriptionStatus } from "./stripe-actions";
 import { db } from "~/server/db";
 import { FREE_ACCOUNTS_PER_USER, PRO_ACCOUNTS_PER_USER } from "./data";
+import { isDemoMode } from "./demo-mailbox";
 
 export const getAurinkoAuthUrl = async (
   serviceType: "Google" | "Office365",
 ) => {
   const { userId } = await auth();
   if (!userId) throw new Error("User not authenticated");
+
+  if (isDemoMode()) {
+    return "/mail";
+  }
 
   const isSubscribed = await getSubscriptionStatus();
   const accounts = await db.account.count({ where: { userId } });

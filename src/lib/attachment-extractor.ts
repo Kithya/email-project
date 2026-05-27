@@ -133,7 +133,7 @@ export async function ensureAttachmentProcessed(attachmentId: string) {
       select: { accessToken: true },
     });
 
-    if (accountRow && att.emailId) {
+    if (accountRow?.accessToken && att.emailId) {
       const acc = new Account(accountRow.accessToken);
       const base64 = await acc.getAttachmentContent(att.emailId, att.id);
       if (base64) {

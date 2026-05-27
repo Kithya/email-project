@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 export default function AttachmentViewer({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = params;
+  const { id } = React.use(params);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [mime, setMime] = useState<string>("application/octet-stream");
   const [filename, setFilename] = useState<string>("attachment");

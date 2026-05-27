@@ -72,6 +72,7 @@ const Component = ({
   const [attachments, setAttachments] = React.useState<AttachmentInput[]>([]);
 
   const sendEmail = api.account.sendEmail.useMutation();
+  const utils = api.useUtils();
 
   const handleSend = async (html: string, atts?: AttachmentInput[]) => {
     if (!replyDetails) return;
@@ -92,6 +93,9 @@ const Component = ({
       {
         onSuccess: () => {
           toast.success("Email sent");
+          void utils.account.getThreads.invalidate();
+          void utils.account.getThreadById.invalidate();
+          void utils.account.getNumThreads.invalidate();
           // reset composer bits
           setAttachments([]);
         },

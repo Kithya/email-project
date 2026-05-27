@@ -1,83 +1,95 @@
-import { Bell, CheckCircle2, Edit3, MessageCircle, Wrench } from "lucide-react";
+import {
+  Bell,
+  CheckCircle2,
+  Edit3,
+  Inbox,
+  MessageCircle,
+  Search,
+} from "lucide-react";
 
 export const plans = [
   {
-    name: "Enterprise",
+    name: "Demo",
     price: "$0",
     period: "forever",
-    description: "Perfect for small teams getting started",
+    description: "A polished portfolio demo with seeded business mailboxes.",
     features: [
-      "Up to 10 AI-powered replies per month",
-      "Basic email management",
-      "1 conversational thread",
-      "Basic conversation history",
-      "Email scheduling (3 emails)",
-      "Smart Grammar & language check",
-      "Follow-up Schedule system",
-      "Limited to 2 inbox tool",
+      "Three realistic demo accounts",
+      "Inbox, sent, draft, and done workflows",
+      "Local send and reply simulation",
+      "AI answers grounded in seeded emails",
+      "Writing improvement and proofreading tools",
     ],
-    buttonText: "Choose plan",
+    buttonText: "Open demo",
     buttonVariant: "outline" as const,
     popular: false,
   },
   {
-    name: "Premium",
-    price: "$4.99",
-    period: "per month",
-    description: "Best value for growing teams",
+    name: "Portfolio Ready",
+    price: "Live",
+    period: "showcase",
+    description:
+      "Built to show full-stack product thinking without paid email APIs.",
     features: [
-      "Unlimited AI replies and templates",
-      "Up to 5 conversational accounts",
-      "Full Conversational Memory  with up to 30 clients",
-      "Follow-up Reminders System (e.g. time-based triggers, lead priority)",
-      "Custom Tone Training",
-      "Deep Grammar/Language Suggestions with writing style feedback",
+      "Per-account AI chat context",
+      "Safe local outbox instead of external delivery",
+      "Professional seeded executive, sales, and support inboxes",
+      "Searchable conversations and account switching",
+      "Provider-ready architecture for Gmail, Graph, IMAP, or Aurinko later",
     ],
-    buttonText: "Select $4 / Month",
+    buttonText: "View mailbox",
     buttonVariant: "default" as const,
     popular: true,
   },
 ];
 export const features = [
   {
-    title: "Smart Reply Generator",
+    title: "Demo Mailboxes",
     description:
-      "AI-powered suggestions for quick and professional email responses tailored to your communication style.",
-    icon: Wrench,
+      "Executive, sales, and support inboxes give reviewers a real product tour immediately after sign-in.",
+    icon: Inbox,
     color: "text-primary",
     bgColor: "bg-primary/10",
   },
   {
-    title: "Conversational Memory",
+    title: "Account-Aware AI",
     description:
-      "Keep track of important conversations and context across email threads automatically.",
+      "Ask questions against the selected mailbox only, with answers grounded in the visible email data.",
     icon: MessageCircle,
     color: "text-warning",
     bgColor: "bg-warning/10",
   },
   {
-    title: "Follow-Up Reminders",
+    title: "Safe Local Sending",
     description:
-      "Never miss important follow-ups with intelligent reminder scheduling and priority detection.",
+      "Compose and reply flows save to the local outbox so demos never depend on SMTP or provider quotas.",
     icon: Bell,
     color: "text-success",
     bgColor: "bg-success/10",
   },
   {
-    title: "Tone Editor",
+    title: "Writing Tools",
     description:
-      "Adjust the tone and style of your emails to match the situation and recipient perfectly.",
+      "Improve tone, proofread drafts, and generate polished replies without leaving the mailbox.",
     icon: Edit3,
     color: "text-info",
     bgColor: "bg-info/10",
   },
   {
-    title: "Grammar Assistance",
+    title: "Searchable Threads",
     description:
-      "Real-time grammar checking and writing suggestions to ensure professional communication.",
-    icon: CheckCircle2,
+      "Quickly scan conversations, switch folders, and inspect thread-level context like a real email client.",
+    icon: Search,
     color: "text-primary",
     bgColor: "bg-primary/10",
+  },
+  {
+    title: "Portfolio Stability",
+    description:
+      "Demo mode avoids expensive third-party email APIs while preserving a path to real providers later.",
+    icon: CheckCircle2,
+    color: "text-success",
+    bgColor: "bg-success/10",
   },
 ];
 
@@ -90,29 +102,29 @@ export const navigation = [
 
 export const faqs = [
   {
-    question: "What is Webflow and why is it the best website builder?",
+    question: "Can I try the app without linking a real mailbox?",
     answer:
-      "Dealflow is an AI-powered email management platform that helps modern professionals streamline their email workflow. It combines intelligent automation, smart replies, and powerful organization tools to make email management effortless and more productive.",
+      "Yes. Every signed-in demo user receives seeded executive, sales, and support mailboxes, so the product works immediately without Aurinko, Gmail, IMAP, or SMTP credentials.",
   },
   {
-    question: "What is your favorite template from RRX Templates?",
+    question: "Does Ask AI answer from the selected account only?",
     answer:
-      "We offer a variety of professionally designed email templates that work seamlessly with our AI system. Our templates are optimized for different business scenarios, from sales outreach to customer support, ensuring your communications are always professional and effective.",
+      "Yes. The AI chat is scoped to the currently selected account and uses that mailbox's email data as its context.",
   },
   {
-    question: "What is your favorite template from RRX Templates?",
+    question: "Will demo sends actually email someone?",
     answer:
-      "Our AI learns from your communication patterns and preferences to provide increasingly accurate suggestions. The more you use Dealflow, the better it becomes at understanding your unique style and helping you craft the perfect responses for any situation.",
+      "No. Demo sending is intentionally local-only. Replies and composed messages appear in the sent mailbox without delivering external email.",
   },
   {
-    question: "What is your favorite template from RRX Templates?",
+    question: "Can real email providers be added later?",
     answer:
-      "Yes! Dealflow integrates seamlessly with popular email providers including Gmail, Outlook, and other IMAP-compatible services. Our platform works as an overlay to enhance your existing email setup without requiring you to switch providers.",
+      "Yes. The demo mode keeps the current product usable while leaving room for Gmail API, Microsoft Graph, IMAP/SMTP, or Aurinko behind a provider switch.",
   },
   {
-    question: "What is your favorite template from RRX Templates?",
+    question: "What does this project demonstrate?",
     answer:
-      "We take security seriously. All data is encrypted in transit and at rest using industry-standard encryption. We are SOC 2 compliant and never store your email content permanently. Our AI processes your data locally and only retains anonymized patterns to improve suggestions.",
+      "It shows full-stack product architecture: authentication, Prisma persistence, tRPC data flows, account switching, local mail sync, AI-assisted writing, and a portfolio-safe demo experience.",
   },
 ];
 

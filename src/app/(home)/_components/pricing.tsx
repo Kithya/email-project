@@ -1,91 +1,98 @@
-import { Check } from "lucide-react";
-import React from "react";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { ArrowRight, Check } from "lucide-react";
+import Link from "next/link";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { plans } from "~/lib/data";
 
 const Pricing = () => {
   return (
-    <section id="pricing" className="bg-muted/30 py-16 lg:py-24">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-16 text-center">
-          <h2 className="text-foreground mb-4 text-3xl font-bold md:text-4xl">
-            Smart Pricing Plans That
+    <section
+      id="pricing"
+      className="border-y border-neutral-200 bg-neutral-50 py-20 dark:border-neutral-800 dark:bg-neutral-900"
+    >
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
+            Demo Mode
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950 sm:text-4xl dark:text-white">
+            Built to present well without billing surprises.
           </h2>
-          <h2 className="mb-6 text-3xl font-bold text-[#377BB7] md:text-4xl">
-            Scale With Your Needs
-          </h2>
-          <p className="text-muted-foreground mx-auto max-w-2xl text-lg">
-            Our plans are thoughtfully designed to enable communication –
-            enabling smarter communication, better analysis, and more productive
-            workflows all the power of AI.
+          <p className="mt-4 text-base leading-7 text-neutral-600 dark:text-neutral-300">
+            The current portfolio path is intentionally local, reliable, and
+            free to run. Real provider integrations can sit behind the same app
+            once credentials and review requirements are ready.
           </p>
         </div>
 
-        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
-          {plans.map((plan, index) => (
-            <Card
-              key={index}
-              className={`hover:shadow-large relative overflow-hidden transition-all duration-300 hover:-translate-y-1 ${
-                plan.popular
-                  ? "border-primary/50 shadow-medium"
-                  : "border-border shadow-soft"
-              }`}
+        <div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className="relative rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-950"
             >
               {plan.popular && (
-                <div className="bg-primary text-primary-foreground absolute top-0 right-0 rounded-bl-lg px-4 py-1 text-sm font-medium">
-                  Most Popular
+                <div className="absolute top-5 right-5 rounded-full bg-neutral-950 px-3 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-950">
+                  Recommended
                 </div>
               )}
 
-              <CardHeader className="pb-8 text-center">
-                <CardTitle className="text-foreground mb-2 text-2xl font-bold">
-                  {plan.name}
-                </CardTitle>
-                <div className="mb-4">
-                  <span className="text-foreground text-4xl font-bold">
-                    {plan.price}
-                  </span>
-                  <span className="text-muted-foreground ml-2">
-                    /{plan.period}
-                  </span>
-                </div>
-                <p className="text-muted-foreground">{plan.description}</p>
-              </CardHeader>
+              <h3 className="text-xl font-semibold text-neutral-950 dark:text-white">
+                {plan.name}
+              </h3>
+              <div className="mt-5 flex items-end gap-2">
+                <span className="text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                  {plan.price}
+                </span>
+                <span className="pb-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  {plan.period}
+                </span>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-neutral-600 dark:text-neutral-300">
+                {plan.description}
+              </p>
 
-              <CardContent className="space-y-6">
-                <ul className="space-y-4">
-                  {plan.features.map((feature, featureIndex) => (
-                    <li
-                      key={featureIndex}
-                      className="flex items-start space-x-3"
+              <ul className="mt-6 space-y-3">
+                {plan.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="flex gap-3 text-sm text-neutral-700 dark:text-neutral-300"
+                  >
+                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-7">
+                <SignedOut>
+                  <SignInButton mode="modal" forceRedirectUrl="/mail">
+                    <Button
+                      variant={plan.buttonVariant}
+                      className="w-full"
+                      size="lg"
                     >
-                      <Check className="text-success mt-0.5 h-5 w-5 flex-shrink-0" />
-                      <span className="text-muted-foreground leading-relaxed">
-                        {feature}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  variant={plan.buttonVariant}
-                  className="w-full py-3 text-lg font-semibold"
-                  size="lg"
-                >
-                  {plan.buttonText}
-                </Button>
-              </CardContent>
-            </Card>
+                      {plan.buttonText}
+                      <ArrowRight className="ml-2 size-4" />
+                    </Button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <Button
+                    asChild
+                    variant={plan.buttonVariant}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <Link href="/mail">
+                      {plan.buttonText}
+                      <ArrowRight className="ml-2 size-4" />
+                    </Link>
+                  </Button>
+                </SignedIn>
+              </div>
+            </div>
           ))}
-        </div>
-
-        <div className="mt-12 text-center">
-          <p className="text-muted-foreground mx-auto max-w-2xl">
-            Our plans are thoughtfully new professionals email management –
-            enabling communication, better analysis, and more productive
-            workflows with all the power of AI.
-          </p>
         </div>
       </div>
     </section>

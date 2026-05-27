@@ -24,35 +24,35 @@ const SearchDisplay = () => {
   const q = normalize(debounced);
   const hasQuery = q.length > 0;
 
-  // Filter only the currently loaded page's threads
   const hits = React.useMemo(() => {
     if (!hasQuery) return [];
     return threads
-      .map((t) => {
-        const lastEmail = t.emails.at(-1);
-        const subject = normalize(t.subject);
+      .map((thread) => {
+        const lastEmail = thread.emails.at(-1);
+        const subject = normalize(thread.subject);
         const from =
           normalize(lastEmail?.from?.name ?? "") +
           " " +
           normalize(lastEmail?.from?.address ?? "");
         const to = normalize(
           (lastEmail?.to ?? [])
-            .map((addr: any) => addr?.address ?? "")
+            .map((address: any) => address?.address ?? "")
             .join(", "),
         );
         const snippet = normalize(lastEmail?.bodySnippet ?? "");
         const body = normalize(lastEmail?.body ?? "");
 
-        const hay = [subject, from, to, snippet, body].join(" ");
-        const match = contains(hay, q);
-        return match
+        const haystack = [subject, from, to, snippet, body].join(" ");
+        return contains(haystack, q)
           ? {
-              id: t.id,
-              subject: t.subject,
+              id: thread.id,
+              subject: thread.subject,
               from: lastEmail?.from?.address ?? "",
-              to: (lastEmail?.to ?? []).map((a: any) => a?.address ?? ""),
+              to: (lastEmail?.to ?? []).map(
+                (address: any) => address?.address ?? "",
+              ),
               rawBody: lastEmail?.bodySnippet ?? "",
-              threadId: t.id,
+              threadId: thread.id,
             }
           : null;
       })
@@ -73,7 +73,7 @@ const SearchDisplay = () => {
       <div className="mb-4 flex items-center gap-2">
         <h2 className="text-sm text-gray-600 dark:text-gray-400">
           {hasQuery
-            ? `Searching this page for “${searchValue}”…`
+            ? `Searching this page for "${searchValue}"...`
             : "Type to search this page"}
         </h2>
       </div>
@@ -86,7 +86,6 @@ const SearchDisplay = () => {
             <li
               key={hit.id}
               className="cursor-pointer list-none rounded-md border border-black p-4 transition-all hover:bg-gray-100 dark:hover:bg-gray-900"
-              // Use onMouseDown so it fires before input blur closes the pane
               onMouseDown={() => {
                 setThreadId(hit.threadId);
                 setIsSearching(false);

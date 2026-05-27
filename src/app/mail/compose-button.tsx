@@ -32,6 +32,7 @@ const ComposeButton = ({ compact = false, className }: ComposeButtonProps) => {
   const { account } = useThreads();
 
   const sendEmail = api.account.sendEmail.useMutation();
+  const utils = api.useUtils();
 
   const handleSend = async (value: string) => {
     if (!account) return;
@@ -57,9 +58,10 @@ const ComposeButton = ({ compact = false, className }: ComposeButtonProps) => {
       {
         onSuccess: () => {
           toast.success("Email sent");
+          void utils.account.getThreads.invalidate();
+          void utils.account.getNumThreads.invalidate();
         },
-        onError: (error) => {
-          console.log(error);
+        onError: () => {
           toast.error("Error sending email");
         },
       },

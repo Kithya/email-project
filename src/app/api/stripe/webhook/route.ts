@@ -31,6 +31,9 @@ export async function POST(req: Request) {
     );
     const subscription = subscriptionResp as unknown as Stripe.Subscription;
 
+    const periodEnd = (subscription as any).current_period_end as
+      | number
+      | undefined;
     const plan = subscription.items.data[0]?.price;
     const productId =
       typeof plan?.product === "string"
@@ -43,7 +46,7 @@ export async function POST(req: Request) {
         productId,
         priceId: plan!.id,
         customerId: subscription.customer as string,
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodEnd: new Date((periodEnd ?? 0) * 1000),
         userId: session.client_reference_id!,
       },
     });
@@ -73,6 +76,9 @@ export async function POST(req: Request) {
     );
     const subscription = subscriptionResp as unknown as Stripe.Subscription;
 
+    const periodEnd = (subscription as any).current_period_end as
+      | number
+      | undefined;
     const plan = subscription.items.data[0]?.price;
     const productId =
       typeof plan?.product === "string"
@@ -82,7 +88,7 @@ export async function POST(req: Request) {
     await db.stripeSubscription.update({
       where: { subscriptionId: subscription.id },
       data: {
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodEnd: new Date((periodEnd ?? 0) * 1000),
         productId,
         priceId: plan!.id,
       },
@@ -100,11 +106,13 @@ export async function POST(req: Request) {
       sub.cancel_at_period_end,
     );
 
+    const periodEnd = (sub as any).current_period_end as number | undefined;
+
     await db.stripeSubscription.update({
       where: { subscriptionId: sub.id },
       data: {
         updatedAt: new Date(),
-        currentPeriodEnd: new Date(sub.current_period_end * 1000),
+        currentPeriodEnd: new Date((periodEnd ?? 0) * 1000),
       },
     });
 

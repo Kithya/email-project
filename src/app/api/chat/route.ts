@@ -1,8 +1,6 @@
-// /api/chat
 import "dotenv/config";
-import { streamText, convertToModelMessages } from "ai";
+import { convertToModelMessages, streamText } from "ai";
 import { auth } from "@clerk/nextjs/server";
-import { OramaClient } from "~/lib/orama";
 import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import { db } from "~/server/db";
@@ -14,24 +12,39 @@ import {
 } from "~/lib/utils";
 import { getSubscriptionStatus } from "~/lib/stripe-actions";
 import { FREE_CREDITS_PER_DAY } from "~/lib/data";
+import { OramaClient } from "~/lib/orama";
 
-async function maybeAnswerWithDbFacts({
-  accountId,
-  userQuery,
-}: {
-  accountId: string;
-  userQuery: string;
-}): Promise<{ answer: string } | null> {
-  const tr = parseTimeRangeFromQuery(userQuery);
-  if (!tr || !isCountQuery(userQuery)) return null;
+function stripHtml(input: string | null | undefined) {
+  return (input ?? "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getSearchTerm(messages: any[]) {
+  const lastMessage = messages[messages.length - 1];
+  if (typeof lastMessage?.content === "string") return lastMessage.content;
+  if (Array.isArray(lastMessage?.parts)) {
+    return lastMessage.parts
+      .filter((part: any) => part.type === "text")
+      .map((part: any) => part.text)
+      .join(" ");
+  }
+  return "";
+}
+
+async function buildCountFacts(accountId: string, userQuery: string) {
+  const range = parseTimeRangeFromQuery(userQuery);
+  if (!range || !isCountQuery(userQuery)) return null;
 
   const emails = await db.email.findMany({
     where: {
       thread: { accountId },
-      sentAt: { gte: tr.start, lt: tr.end },
+      sentAt: { gte: range.start, lt: range.end },
     },
     select: {
-      id: true,
       subject: true,
       sentAt: true,
       from: { select: { address: true, name: true } },
@@ -40,29 +53,146 @@ async function maybeAnswerWithDbFacts({
     take: 50,
   });
 
-  const count = emails.length;
-  const top = emails.slice(0, 10).map((e) => {
-    const fromLabel = e.from?.name
-      ? `${e.from.name} <${e.from.address}>`
-      : (e.from?.address ?? "(unknown)");
-    return `• ${e.subject || "(no subject)"} — from ${fromLabel} — ${e.sentAt.toISOString()}`;
+  const recent = emails.slice(0, 10).map((email) => {
+    const from = email.from?.name
+      ? `${email.from.name} <${email.from.address}>`
+      : (email.from?.address ?? "(unknown)");
+    return `- ${email.subject || "(no subject)"} - from ${from} - ${email.sentAt.toISOString()}`;
   });
 
-  const facts = [
-    `Time range: ${tr.label}`,
-    `Email count: ${count}`,
-    ...(count > 0 ? ["Recent items:", ...top] : []),
+  return [
+    `The user asked a count question.`,
+    `Time range: ${range.label}`,
+    `Email count: ${emails.length}`,
+    ...(recent.length ? ["Recent matching emails:", ...recent] : []),
   ].join("\n");
+}
 
-  const { textStream } = await streamText({
-    model: openai("gpt-5-mini"),
-    system: `You are an assistant. ONLY use the provided facts to answer. Do not guess.`,
-    prompt: `User asked: "${userQuery}"\n\nFacts (authoritative):\n${facts}\n\nRespond succinctly. If user asked "how many", state the count clearly first. Mention UTC.`,
+function keywordsFromQuery(userQuery: string) {
+  const ignored = new Set([
+    "about",
+    "with",
+    "from",
+    "that",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "have",
+    "email",
+    "emails",
+    "inbox",
+    "message",
+    "messages",
+  ]);
+
+  return userQuery
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter((term) => term.length >= 3 && !ignored.has(term))
+    .slice(0, 10);
+}
+
+async function buildDatabaseContext(accountId: string, userQuery: string) {
+  const terms = keywordsFromQuery(userQuery);
+  const where =
+    terms.length > 0
+      ? {
+          thread: { accountId },
+          OR: terms.flatMap((term) => [
+            { subject: { contains: term, mode: "insensitive" as const } },
+            { body: { contains: term, mode: "insensitive" as const } },
+            { bodySnippet: { contains: term, mode: "insensitive" as const } },
+          ]),
+        }
+      : { thread: { accountId } };
+
+  let emails = await db.email.findMany({
+    where,
+    select: {
+      subject: true,
+      body: true,
+      bodySnippet: true,
+      sentAt: true,
+      emailLabel: true,
+      from: { select: { name: true, address: true } },
+      to: { select: { name: true, address: true } },
+      thread: { select: { subject: true } },
+    },
+    orderBy: { sentAt: "desc" },
+    take: 30,
   });
 
-  let out = "";
-  for await (const chunk of textStream) out += chunk;
-  return { answer: out.trim() || `You received ${count} emails ${tr.label}.` };
+  if (emails.length === 0) {
+    emails = await db.email.findMany({
+      where: { thread: { accountId } },
+      select: {
+        subject: true,
+        body: true,
+        bodySnippet: true,
+        sentAt: true,
+        emailLabel: true,
+        from: { select: { name: true, address: true } },
+        to: { select: { name: true, address: true } },
+        thread: { select: { subject: true } },
+      },
+      orderBy: { sentAt: "desc" },
+      take: 30,
+    });
+  }
+
+  return emails
+    .map((email) => {
+      const from = email.from?.name
+        ? `${email.from.name} <${email.from.address}>`
+        : (email.from?.address ?? "unknown");
+      const to = email.to
+        .map((recipient) =>
+          recipient.name
+            ? `${recipient.name} <${recipient.address}>`
+            : recipient.address,
+        )
+        .join(", ");
+
+      return JSON.stringify({
+        subject: email.subject || email.thread.subject || "(no subject)",
+        folder: email.emailLabel,
+        from,
+        to,
+        sentAt: email.sentAt.toISOString(),
+        body: truncateToTokenLimit(
+          stripHtml(email.body ?? email.bodySnippet),
+          180,
+        ),
+      });
+    })
+    .join("\n");
+}
+
+async function buildIndexContext(accountId: string, userQuery: string) {
+  try {
+    const orama = new OramaClient(accountId);
+    await orama.initialize();
+    const context = await orama.vectorSearch({ term: userQuery });
+
+    return context.hits
+      .slice(0, 15)
+      .map((hit) => {
+        const doc = hit.document as any;
+        return JSON.stringify({
+          subject: doc.subject,
+          from: doc.from,
+          to: doc.to?.[0] || doc.to,
+          body: truncateToTokenLimit(doc.body || doc.rawBody || "", 120),
+          sentAt: doc.sentAt,
+        });
+      })
+      .join("\n");
+  } catch (error) {
+    console.error("Search index unavailable, falling back to database:", error);
+    return "";
+  }
 }
 
 export async function POST(req: Request) {
@@ -76,7 +206,7 @@ export async function POST(req: Request) {
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const { accountId, messages } = await req.json();
-    if (!accountId || !messages) {
+    if (!accountId || !Array.isArray(messages)) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },
@@ -85,113 +215,77 @@ export async function POST(req: Request) {
 
     const account = await db.account.findFirst({
       where: { id: accountId, userId },
+      select: { id: true, name: true, emailAddress: true },
     });
     if (!account) return new Response("Unauthorized account", { status: 403 });
 
-    const lastMessage = messages[messages.length - 1];
-    console.log("lastmessage", lastMessage);
-    let searchTerm = "";
-
-    if (lastMessage?.content) {
-      searchTerm = lastMessage.content;
-    } else if (lastMessage?.parts) {
-      searchTerm = lastMessage.parts
-        .filter((part: any) => part.type === "text")
-        .map((part: any) => part.text)
-        .join(" ");
-    }
-
-    if (!searchTerm) {
+    const userQuery = getSearchTerm(messages).trim();
+    if (!userQuery) {
       return NextResponse.json(
         { error: "No message content found" },
         { status: 400 },
       );
     }
 
-    const [chatbotInteraction, structured] = await Promise.all([
-      db.chatbotInteraction.findUnique({ where: { day: today, userId } }),
-      maybeAnswerWithDbFacts({ accountId, userQuery: searchTerm }),
-    ]);
+    const chatbotInteraction = await db.chatbotInteraction.findUnique({
+      where: { day: today, userId },
+    });
+
+    if (
+      !isSubscribed &&
+      (chatbotInteraction?.count ?? 0) >= FREE_CREDITS_PER_DAY
+    ) {
+      return new Response("You have reached the free limit for today", {
+        status: 429,
+      });
+    }
 
     if (!isSubscribed) {
-      if (!chatbotInteraction) {
-        await db.chatbotInteraction.create({
-          data: { day: today, userId, count: 1 },
-        });
-      } else if (chatbotInteraction.count >= FREE_CREDITS_PER_DAY) {
-        return new Response("You have reached the free limit for today", {
-          status: 429,
-        });
-      }
-    }
-
-    if (structured) {
-      const result = await streamText({
-        model: openai("gpt-5-mini"),
-        system: "You respond in 1-3 concise sentences.",
-        prompt: structured.answer,
+      await db.chatbotInteraction.upsert({
+        where: { day: today, userId },
+        update: { count: { increment: 1 } },
+        create: { day: today, userId, count: 1 },
       });
-      return result.toUIMessageStreamResponse();
     }
 
-    const orama = new OramaClient(accountId);
-    await orama.initialize();
+    const [countFacts, indexContext, databaseContext] = await Promise.all([
+      buildCountFacts(accountId, userQuery),
+      account.id.startsWith("demo:")
+        ? Promise.resolve("")
+        : buildIndexContext(accountId, userQuery),
+      buildDatabaseContext(accountId, userQuery),
+    ]);
 
-    const context = await orama.vectorSearch({ term: searchTerm });
-
-    const MAX_HITS = 15;
-    const limitedHits = context.hits.slice(0, MAX_HITS);
-    console.log(
-      `Using ${limitedHits.length} hits instead of ${context.hits.length}`,
+    const contextText = truncateToTokenLimit(
+      [countFacts, indexContext, databaseContext].filter(Boolean).join("\n"),
+      9000,
     );
 
-    const maxContextTokens = 8000;
-    let contextText = limitedHits
-      .map((hit) => {
-        const doc = hit.document as any;
-        return JSON.stringify({
-          subject: doc.subject,
-          from: doc.from,
-          to: doc.to?.[0] || doc.to,
-          body: truncateToTokenLimit(doc.body || doc.rawBody || "", 120),
-          sentAt: doc.sentAt,
-        });
-      })
-      .join("\n");
+    const systemMessage = `You are an AI email assistant for ${account.name} (${account.emailAddress}).
 
-    contextText = truncateToTokenLimit(contextText, maxContextTokens);
+CONTEXT:
+${contextText || "No emails found for this account."}
 
-    const systemMessage = `You are an AI email assistant. Current time: ${new Date().toLocaleString()}
+Instructions:
+- Answer using only the email context above.
+- You do have access to the provided email context. Do not say you cannot access the inbox when CONTEXT contains emails.
+- If the exact answer is not present, summarize the closest relevant emails and say what is missing.
+- Be concise, specific, and cite sender names, subjects, dates, or folders when useful.
+- If asked what the user can ask, suggest questions based on the actual context.`;
 
-      CONTEXT:
-      ${contextText}
-
-      Instructions:
-      - Answer based on provided email context
-      - Be concise and helpful
-      - If insufficient context, say so politely
-      - Don't speculate beyond the provided information`;
-
-    const trimmedMessages = trimMessages(messages, 6);
+    const accountScopedMessages = messages.filter((message: any) => {
+      const metadataAccountId =
+        message?.metadata?.accountId ??
+        message?.experimental_metadata?.accountId;
+      return !metadataAccountId || metadataAccountId === accountId;
+    });
+    const trimmedMessages = trimMessages(accountScopedMessages, 6);
     const modelMessages = convertToModelMessages(trimmedMessages);
 
     const result = await streamText({
       model: openai("gpt-5"),
       system: systemMessage,
       messages: modelMessages,
-      // @ts-ignore
-      onStart: () => console.log("stream started"),
-      // @ts-ignore
-      onCompletion: async ({ text, usage }) => {
-        db.chatbotInteraction
-          .update({
-            where: { day: today, userId },
-            data: { count: { increment: 1 } },
-          })
-          .catch(console.error);
-        console.log("stream complete", text);
-        console.log("Token usage:", usage);
-      },
     });
 
     return result.toUIMessageStreamResponse();

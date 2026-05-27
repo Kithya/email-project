@@ -125,7 +125,7 @@ const ThreadDisplay = () => {
         </>
       ) : (
         <div className="text-muted-foreground p-8 text-center">
-          No message seleted
+          Select a message to preview the conversation.
         </div>
       )}
     </div>

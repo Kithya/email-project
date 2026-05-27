@@ -13,17 +13,27 @@ import { api } from "~/trpc/react";
 
 const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
   const { accountId } = useThreads();
+  const chatId = React.useMemo(
+    () => `mail-chat:${accountId || "pending"}`,
+    [accountId],
+  );
   const [input, setInput] = useState("");
   const [isRateLimited, setIsRateLimited] = useState(false);
   const utils = api.useUtils();
+  const transport = React.useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: {
+          accountId,
+        },
+      }),
+    [accountId],
+  );
 
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        accountId,
-      },
-    }),
+    id: chatId,
+    transport,
     onError: (error) => {
       console.error("Chat error:", error);
 
@@ -62,7 +72,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
   // @ts-ignore
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim() && !isLoading && !isRateLimited) {
+    if (accountId && input.trim() && !isLoading && !isRateLimited) {
       sendMessage({ text: input });
       setInput("");
     }
@@ -178,7 +188,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     !isRateLimited &&
                     handleInputChange({
                       target: {
-                        value: "When is my next flight?",
+                        value: "Which emails need a reply?",
                       },
                     })
                   }
@@ -192,7 +202,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     },
                   )}
                 >
-                  When is my next flight?
+                  Needs reply
                 </span>
                 <span
                   onClick={() =>
@@ -200,7 +210,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     !isRateLimited &&
                     handleInputChange({
                       target: {
-                        value: "When is my next meeting?",
+                        value: "Summarize the important emails",
                       },
                     })
                   }
@@ -214,7 +224,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     },
                   )}
                 >
-                  When is my next meeting?
+                  Summarize important
                 </span>
               </div>
             </div>
@@ -224,7 +234,7 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
               type="text"
               onChange={handleInputChange}
               value={input}
-              disabled={isLoading || isRateLimited}
+              disabled={isLoading || isRateLimited || !accountId}
               className={cn(
                 "py- relative h-9 flex-grow rounded-full border border-gray-200 bg-white px-3 text-[15px] outline-none placeholder:text-[13px] placeholder:text-gray-400 focus-visible:ring-0 focus-visible:ring-blue-500/20 focus-visible:ring-offset-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400 dark:focus-visible:ring-blue-500/20 dark:focus-visible:ring-offset-1 dark:focus-visible:ring-offset-gray-700",
                 {
@@ -232,11 +242,13 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
                 },
               )}
               placeholder={
-                isRateLimited
-                  ? "Rate limited - please wait..."
-                  : isLoading
-                    ? "AI is thinking..."
-                    : "Ask AI anything about your emails"
+                !accountId
+                  ? "Preparing demo mailbox..."
+                  : isRateLimited
+                    ? "Rate limited - please wait..."
+                    : isLoading
+                      ? "AI is thinking..."
+                      : "Ask AI anything about your emails"
               }
             />
             <motion.div
@@ -254,14 +266,16 @@ const AskAI = ({ isCollapsed }: { isCollapsed: boolean }) => {
             </motion.div>
             <button
               type="submit"
-              disabled={isLoading || isRateLimited || !input.trim()}
+              disabled={
+                isLoading || isRateLimited || !accountId || !input.trim()
+              }
               className={cn(
                 "ml-2 flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 transition-colors dark:bg-gray-800",
                 {
                   "cursor-not-allowed opacity-50":
-                    isLoading || isRateLimited || !input.trim(),
+                    isLoading || isRateLimited || !accountId || !input.trim(),
                   "hover:bg-gray-300 dark:hover:bg-gray-700":
-                    !isLoading && !isRateLimited && input.trim(),
+                    !isLoading && !isRateLimited && accountId && input.trim(),
                 },
               )}
             >

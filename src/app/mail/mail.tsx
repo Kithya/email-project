@@ -24,7 +24,7 @@ import AskAI from "./ask-ai";
 import { UserButton } from "@clerk/nextjs";
 import ThemeToggle from "~/components/theme-toggle";
 import ComposeButton from "./compose-button";
-import { PenLine } from "lucide-react";
+import { useLocalStorage } from "usehooks-ts";
 
 type Props = {
   defaultLayout: number[] | undefined;
@@ -38,6 +38,7 @@ const Mail = ({
   defaultCollapsed,
 }: Props) => {
   const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed);
+  const [done, setDone] = useLocalStorage("email-done", false);
   // const [hasMounted, setHasMounted] = React.useState(false);
 
   // React.useEffect(() => {
@@ -53,9 +54,6 @@ const Mail = ({
     <TooltipProvider delayDuration={0}>
       <ResizablePanelGroup
         direction="horizontal"
-        onLayout={(sizes: number[]) => {
-          console.log(sizes);
-        }}
         className="h-full min-h-screen items-stretch"
       >
         <ResizablePanel
@@ -90,14 +88,17 @@ const Mail = ({
 
             {/* Ask AI section */}
             <AskAI isCollapsed={isCollapsed} />
-            <ButtomActions isCollapsed={isCollapsed} />
+            <BottomActions isCollapsed={isCollapsed} />
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[1]} minSize={30}>
-          <Tabs defaultValue="inbox">
+          <Tabs
+            value={done ? "done" : "inbox"}
+            onValueChange={(value) => setDone(value === "done")}
+          >
             <div className="flex items-center border-b px-4 py-2">
-              <h1 className="text-xl font-bold">Inbox</h1>
+              <h1 className="text-xl font-bold">{done ? "Done" : "Inbox"}</h1>
               <TabsList className="ml-auto">
                 <TabsTrigger
                   value="inbox"
@@ -136,7 +137,7 @@ const Mail = ({
 
 export default Mail;
 
-function ButtomActions({ isCollapsed }: { isCollapsed: boolean }) {
+function BottomActions({ isCollapsed }: { isCollapsed: boolean }) {
   if (isCollapsed) {
     return (
       <div className="flex flex-col items-center gap-4 p-4">

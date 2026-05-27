@@ -9,10 +9,9 @@ const LinkAccount = () => {
       onClick={async () => {
         const authUrl = await getAurinkoAuthUrl("Google");
         window.location.href = authUrl;
-        console.log(authUrl);
       }}
     >
-      Link Account
+      Open Mailbox
     </Button>
   );
 };
