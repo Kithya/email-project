@@ -22,7 +22,7 @@ const Hero = () => {
           </div>
 
           <h1 className="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-neutral-950 sm:text-5xl lg:text-6xl dark:text-white">
-            Dealflow turns a demo inbox into a working AI email workspace.
+            Dealflow turns an inbox into a working AI email workspace.
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg dark:text-neutral-300">
